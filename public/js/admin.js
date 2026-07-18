@@ -80,7 +80,6 @@ function renderCategorySelectOptions() {
 
     return `
       <optgroup label="${group.parent.replace(/"/g, "&quot;")}">
-        <option value="${group.parent.replace(/"/g, "&quot;")}">${group.parent}</option>
         ${childrenHtml}
       </optgroup>
     `;
@@ -105,7 +104,6 @@ function renderCategoryNav() {
   const { grouped, remaining } = buildCategoryGrouping(categories);
 
   const groupedLinks = grouped.map((group) => {
-    const parentHref = `/admin.html?category=${encodeURIComponent(group.parent)}`;
     const childrenLinks = group.children.map((child) => {
       const href = `/admin.html?category=${encodeURIComponent(child)}`;
       return `<a class="nav-submenu-link" data-category="${child.replace(/"/g, "&quot;")}" href="${href}">${child}</a>`;
@@ -113,7 +111,7 @@ function renderCategoryNav() {
 
     return `
       <div class="nav-submenu-group">
-        <a class="nav-submenu-link" data-category="${group.parent.replace(/"/g, "&quot;")}" href="${parentHref}">${group.parent}</a>
+        <div class="nav-submenu-parent">${group.parent}</div>
         <div class="nav-submenu-children">${childrenLinks}</div>
       </div>
     `;

@@ -97,6 +97,15 @@ body{
     gap:6px;
 }
 
+.nav-submenu-parent{
+    padding:6px 10px 2px;
+    color:#9ca3af;
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+}
+
 .nav-submenu-children{
     display:flex;
     flex-direction:column;
