@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: gio-hang-quan-4
+    env: node
+    plan: starter
+    rootDir: .
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /var/data/gio-hang-quan-4/data
+      - key: UPLOAD_DIR
+        value: /var/data/gio-hang-quan-4/uploads
+    disk:
+      name: gio-hang-quan-4-data
+      mountPath: /var/data/gio-hang-quan-4
+      sizeGB: 1
