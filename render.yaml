@@ -16,4 +16,4 @@ services:
     disk:
       name: gio-hang-quan-4-data
       mountPath: /var/data/gio-hang-quan-4
-      sizeGB: 1
+      sizeGB: 5
