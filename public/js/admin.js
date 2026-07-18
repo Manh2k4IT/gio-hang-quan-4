@@ -1196,7 +1196,7 @@ async function load() {
       headerTitle.textContent = category ? `📦 Quản lí đơn hàng kho vải quận 4 - ${category}` : "📦 Quản lí đơn hàng kho vải quận 4";
     }
     if (headerDesc) {
-      headerDesc.textContent = category ? `Đang quản lý riêng danh mục ${category}` : "Quản lý sản phẩm nhanh cho phiên livestream";
+      headerDesc.textContent = category ? `Đang quản lý riêng danh mục ${category}` : "Quản lý sản phẩm kho vải quận 4";
     }
     if (addBtn) {
       addBtn.textContent = category ? `+ Thêm sản phẩm vào ${category}` : "+ Thêm sản phẩm";
