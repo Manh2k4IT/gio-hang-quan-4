@@ -26,7 +26,7 @@ const checkoutRateWindowMs = Math.max(1000, Number(process.env.CHECKOUT_RATE_WIN
 const checkoutRateMax = Math.max(5, Number(process.env.CHECKOUT_RATE_MAX) || 30);
 const uploadMaxFileSizeMb = Math.max(1, Number(process.env.UPLOAD_MAX_FILE_SIZE_MB) || 12);
 const uploadMaxFileSizeBytes = uploadMaxFileSizeMb * 1024 * 1024;
-const shopPublicUrl = String(process.env.SHOP_PUBLIC_URL || "https://shop.gusa.vn").trim();
+const shopPublicUrl = String(process.env.SHOP_PUBLIC_URL || "").trim();
 const imageOptimizeEnabled = String(process.env.IMAGE_OPTIMIZE_ENABLED || "true").toLowerCase() !== "false";
 const imageMaxWidthPx = Math.max(640, Number(process.env.IMAGE_MAX_WIDTH_PX) || 1600);
 const imageQuality = Math.min(95, Math.max(50, Number(process.env.IMAGE_QUALITY) || 82));

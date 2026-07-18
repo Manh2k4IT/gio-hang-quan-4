@@ -3,7 +3,7 @@ const API = window.location.origin && window.location.origin !== "null"
   : "http://localhost:3000";
 const state = { products: [], orders: [] };
 const DEFAULT_SHOP_LOGO = "/uploads/logogusa.jpg";
-const DEFAULT_PUBLIC_SHOP_URL = "https://shop.gusa.vn";
+const DEFAULT_PUBLIC_SHOP_URL = "";
 const DEFAULT_UPLOAD_MAX_FILE_SIZE_MB = 12;
 let productSortable = null;
 const FIXED_PRODUCT_CATEGORIES = [
@@ -78,7 +78,8 @@ function sanitizeOrigin(input) {
 
 function getShopBaseOrigin() {
   const host = String(window.location.hostname || "").toLowerCase();
-  if (host === "localhost" || host === "127.0.0.1") {
+  // In production, always keep admin/shop on the same domain to avoid stale links to old services.
+  if (host !== "localhost" && host !== "127.0.0.1") {
     return window.location.origin;
   }
 
@@ -1192,7 +1193,7 @@ async function load() {
     const addBtn = document.querySelector(".header .btn-add");
     const shopLink = document.getElementById("shop-link");
     if (headerTitle) {
-      headerTitle.textContent = category ? `📦 Quản lý kho - ${category}` : "📦 Quản lý kho Livestream";
+      headerTitle.textContent = category ? `📦 Quản lí đơn hàng kho vải quận 4 - ${category}` : "📦 Quản lí đơn hàng kho vải quận 4";
     }
     if (headerDesc) {
       headerDesc.textContent = category ? `Đang quản lý riêng danh mục ${category}` : "Quản lý sản phẩm nhanh cho phiên livestream";
