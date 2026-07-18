@@ -595,7 +595,18 @@ const DEFAULT_ORDERS = [
 const DEFAULT_SETTINGS = {
     shopLogo: "/uploads/logogusa.jpg",
     shopPublicUrl,
-    productCategories: ["Áo", "Quần", "Chân váy", "Đầm", "Khác"],
+    productCategories: [
+        "LINEN TƯNG",
+        "LINEN TƯNG HỌA TIẾT",
+        "LINEN TƯNG MÀU",
+        "LINEN TƠ",
+        "LINEN TƠ HỌA TIẾT",
+        "LINEN TƠ MÀU",
+        "LINEN ƯỚT",
+        "LINEN BỐ SỚ XÉO",
+        "LINEN TẰM GÂN THÊU",
+        "Khác"
+    ],
     wholesaleCareStatuses: {}
 };
 

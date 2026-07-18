@@ -8,7 +8,11 @@ const DEFAULT_UPLOAD_MAX_FILE_SIZE_MB = 12;
 let productSortable = null;
 const FIXED_PRODUCT_CATEGORIES = [
   "LINEN TƯNG",
+  "LINEN TƯNG HỌA TIẾT",
+  "LINEN TƯNG MÀU",
   "LINEN TƠ",
+  "LINEN TƠ HỌA TIẾT",
+  "LINEN TƠ MÀU",
   "LINEN ƯỚT",
   "LINEN BỐ SỚ XÉO",
   "LINEN TẰM GÂN THÊU"
