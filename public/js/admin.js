@@ -17,6 +17,16 @@ const FIXED_PRODUCT_CATEGORIES = [
   "LINEN BỐ SỚ XÉO",
   "LINEN TẰM GÂN THÊU"
 ];
+const CATEGORY_GROUPS = [
+  {
+    parent: "LINEN TƯNG",
+    children: ["LINEN TƯNG HỌA TIẾT", "LINEN TƯNG MÀU"]
+  },
+  {
+    parent: "LINEN TƠ",
+    children: ["LINEN TƠ HỌA TIẾT", "LINEN TƠ MÀU"]
+  }
+];
 let variantRowsData = [];
 let shopPublicUrl = DEFAULT_PUBLIC_SHOP_URL;
 let uploadMaxFileSizeMb = DEFAULT_UPLOAD_MAX_FILE_SIZE_MB;
@@ -32,6 +42,28 @@ function getCategoryOptions() {
   return [...productCategories];
 }
 
+function buildCategoryGrouping(categories) {
+  const normalized = categories.map((item) => normalizeCategoryLabel(item)).filter(Boolean);
+  const used = new Set();
+
+  const grouped = CATEGORY_GROUPS.map((group) => {
+    const parent = normalized.find((item) => normalizeCategoryKey(item) === normalizeCategoryKey(group.parent)) || group.parent;
+    used.add(normalizeCategoryKey(parent));
+
+    const children = group.children
+      .map((child) => normalized.find((item) => normalizeCategoryKey(item) === normalizeCategoryKey(child)) || child)
+      .filter((value, index, array) => array.findIndex((item) => normalizeCategoryKey(item) === normalizeCategoryKey(value)) === index);
+
+    children.forEach((child) => used.add(normalizeCategoryKey(child)));
+
+    return { parent, children };
+  });
+
+  const remaining = normalized.filter((item) => !used.has(normalizeCategoryKey(item)));
+
+  return { grouped, remaining };
+}
+
 function renderCategorySelectOptions() {
   const select = document.getElementById("category");
   if (!select) return;
@@ -39,9 +71,26 @@ function renderCategorySelectOptions() {
   const selected = normalizeCategoryLabel(select.value);
   const options = getCategoryOptions();
 
-  select.innerHTML = options
+  const { grouped, remaining } = buildCategoryGrouping(options);
+
+  const groupedHtml = grouped.map((group) => {
+    const childrenHtml = group.children
+      .map((child) => `<option value="${child.replace(/"/g, "&quot;")}">${child}</option>`)
+      .join("");
+
+    return `
+      <optgroup label="${group.parent.replace(/"/g, "&quot;")}">
+        <option value="${group.parent.replace(/"/g, "&quot;")}">${group.parent}</option>
+        ${childrenHtml}
+      </optgroup>
+    `;
+  }).join("");
+
+  const remainingHtml = remaining
     .map((category) => `<option value="${category.replace(/"/g, "&quot;")}">${category}</option>`)
     .join("");
+
+  select.innerHTML = `${groupedHtml}${remainingHtml}`;
 
   const fallback = options[0] || "Khác";
   const hasSelected = options.some((item) => normalizeCategoryKey(item) === normalizeCategoryKey(selected));
@@ -53,13 +102,29 @@ function renderCategoryNav() {
   if (!container) return;
 
   const categories = getCategoryOptions();
-  const links = categories.map((category) => {
+  const { grouped, remaining } = buildCategoryGrouping(categories);
+
+  const groupedLinks = grouped.map((group) => {
+    const parentHref = `/admin.html?category=${encodeURIComponent(group.parent)}`;
+    const childrenLinks = group.children.map((child) => {
+      const href = `/admin.html?category=${encodeURIComponent(child)}`;
+      return `<a class="nav-submenu-link" data-category="${child.replace(/"/g, "&quot;")}" href="${href}">${child}</a>`;
+    }).join("");
+
+    return `
+      <div class="nav-submenu-group">
+        <a class="nav-submenu-link" data-category="${group.parent.replace(/"/g, "&quot;")}" href="${parentHref}">${group.parent}</a>
+        <div class="nav-submenu-children">${childrenLinks}</div>
+      </div>
+    `;
+  }).join("");
+
+  const remainingLinks = remaining.map((category) => {
     const href = `/admin.html?category=${encodeURIComponent(category)}`;
     return `<a class="nav-submenu-link" data-category="${category.replace(/"/g, "&quot;")}" href="${href}">${category}</a>`;
-  });
+  }).join("");
 
-  links.push('<a class="nav-submenu-link" data-category="" href="/admin.html">Tất cả</a>');
-  container.innerHTML = links.join("");
+  container.innerHTML = `${groupedLinks}${remainingLinks}<a class="nav-submenu-link" data-category="" href="/admin.html">Tất cả</a>`;
 }
 
 function syncCategoryUi() {
