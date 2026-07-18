@@ -171,6 +171,12 @@ function toAbsolutePublicUrl(value, baseUrl) {
     return `${base}/${raw.replace(/^\/+/, "")}`;
 }
 
+function setNoCacheHeaders(res) {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+}
+
 function buildProductShareMeta(req, productId) {
     const id = Number(productId);
     if (!Number.isFinite(id) || id <= 0) return null;
@@ -239,11 +245,25 @@ app.get("/shop.html", (req, res, next) => {
     }
 
     const html = injectShareMetaToShopHtml(template, meta);
+    setNoCacheHeaders(res);
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.send(html);
 });
 
-app.use(express.static("public"));
+app.use(express.static("public", {
+    setHeaders: (res, filePath) => {
+        const normalized = String(filePath || "").replace(/\\/g, "/").toLowerCase();
+        if (
+            normalized.endsWith("/admin.html")
+            || normalized.endsWith("/shop.html")
+            || normalized.endsWith("/index.html")
+            || normalized.endsWith("/js/admin.js")
+            || normalized.endsWith("/css/admin.css")
+        ) {
+            setNoCacheHeaders(res);
+        }
+    }
+}));
 
 const writeLimiter = rateLimit({
     windowMs: writeRateWindowMs,
