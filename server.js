@@ -184,12 +184,12 @@ function buildProductShareMeta(req, productId) {
     const imagePath = String(product.image || variants[0] || "").trim();
     const imageUrl = toAbsolutePublicUrl(imagePath, baseUrl) || `${baseUrl}/uploads/logogusa.jpg`;
 
-    const productName = String(product.name || "Sản phẩm LIVE SHOP").trim() || "Sản phẩm LIVE SHOP";
+    const productName = String(product.name || "Sản phẩm Giỏ hàng Gusa").trim() || "Sản phẩm Giỏ hàng Gusa";
     const productPrice = Math.max(0, Math.floor(Number(product.price) || 0)).toLocaleString("vi-VN");
     const productStock = Math.max(0, Math.floor(Number(product.stock) || 0));
 
-    const title = `${productName} | LIVE SHOP`;
-    const description = `Giá ${productPrice}đ - Tồn kho ${productStock}. Xem chi tiết và đặt hàng tại LIVE SHOP.`;
+    const title = `${productName} | Giỏ hàng Gusa`;
+    const description = `Giá ${productPrice}đ - Tồn kho ${productStock}. Xem chi tiết và đặt hàng tại Giỏ hàng Gusa.`;
 
     return {
         title,
@@ -211,7 +211,7 @@ function injectShareMetaToShopHtml(template, meta) {
         `  <meta property=\"og:description\" content=\"${escapeHtml(meta.description)}\" />`,
         `  <meta property=\"og:url\" content=\"${escapeHtml(meta.canonicalUrl)}\" />`,
         `  <meta property=\"og:image\" content=\"${escapeHtml(meta.imageUrl)}\" />`,
-        "  <meta property=\"og:image:alt\" content=\"Ảnh sản phẩm LIVE SHOP\" />",
+        "  <meta property=\"og:image:alt\" content=\"Ảnh sản phẩm Giỏ hàng Gusa\" />",
         "  <meta name=\"twitter:card\" content=\"summary_large_image\" />",
         `  <meta name=\"twitter:title\" content=\"${escapeHtml(meta.title)}\" />`,
         `  <meta name=\"twitter:description\" content=\"${escapeHtml(meta.description)}\" />`,
