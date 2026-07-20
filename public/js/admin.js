@@ -226,7 +226,7 @@ function updateVariantFilesHint() {
   hint.textContent = `Đã tạo ${totalRows} dòng màu, có ảnh ở ${withImage} dòng`;
 }
 
-function createVariantRowData(name = "", existingUrl = "", colorStock = null, cutLength = null, variantPrice = null) {
+function createVariantRowData(name = "", existingUrl = "", colorStock = null, cutLength = null, variantPrice = null, variantOldPrice = null) {
   return {
     id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     name: String(name || "").trim(),
@@ -234,6 +234,7 @@ function createVariantRowData(name = "", existingUrl = "", colorStock = null, cu
     colorStock: Number.isFinite(Number(colorStock)) ? Math.max(0, Math.round(Number(colorStock) * 100) / 100) : null,
     cutLength: parseVariantLengthInput(cutLength),
     variantPrice: parseVariantPriceInput(variantPrice),
+    variantOldPrice: parseVariantPriceInput(variantOldPrice),
     file: null
   };
 }
@@ -330,6 +331,17 @@ function renderVariantRows() {
             />
           </div>
           <div class="variant-field">
+            <span class="variant-field-label">Giá cũ khổ này (đ)</span>
+            <input
+              type="number"
+              min="0"
+              class="variant-old-price-input"
+              value="${Number.isFinite(Number(row.variantOldPrice)) ? String(Math.max(0, Math.round(Number(row.variantOldPrice)))) : ""}"
+              placeholder="Ví dụ: 120000"
+              oninput="onVariantOldPriceInput('${row.id}', this.value)"
+            />
+          </div>
+          <div class="variant-field">
             <span class="variant-field-label">Số mét tồn</span>
             <input
               type="text"
@@ -350,7 +362,7 @@ function renderVariantRows() {
 }
 
 function addVariantRow(defaultName = "", existingUrl = "", defaultCutLength = null) {
-  variantRowsData.push(createVariantRowData(defaultName, existingUrl, null, defaultCutLength, null));
+  variantRowsData.push(createVariantRowData(defaultName, existingUrl, null, defaultCutLength, null, null));
   syncVariantNamesByIndex();
   renderVariantRows();
 }
@@ -391,6 +403,12 @@ function onVariantPriceInput(rowId, value) {
   const row = variantRowsData.find((item) => item.id === rowId);
   if (!row) return;
   row.variantPrice = parseVariantPriceInput(value);
+}
+
+function onVariantOldPriceInput(rowId, value) {
+  const row = variantRowsData.find((item) => item.id === rowId);
+  if (!row) return;
+  row.variantOldPrice = parseVariantPriceInput(value);
 }
 
 function onVariantStocksInput(rowId, value) {
@@ -885,7 +903,6 @@ function resetProductForm() {
   const currentCategory = getAdminCategory();
   const name = document.getElementById("name");
   const sku = document.getElementById("sku");
-  const oldPrice = document.getElementById("oldPrice");
   const stock = document.getElementById("stock");
   const category = document.getElementById("category");
   const imageUrl = document.getElementById("imageUrl");
@@ -898,7 +915,6 @@ function resetProductForm() {
   if (productId) productId.value = "";
   if (name) name.value = "";
   if (sku) sku.value = "";
-  if (oldPrice) oldPrice.value = "";
   if (stock) stock.value = "";
   const options = getCategoryOptions();
   if (category) {
@@ -920,8 +936,21 @@ function showToast(message) {
   setTimeout(() => toast.classList.remove("show"), 1800);
 }
 
+function getProductBaseOldPriceForDisplay(product) {
+  const firstVariantRaw = Array.isArray(product?.variantOldPrices) ? product.variantOldPrices[0] : null;
+  const parsedVariantBase = parseVariantPriceInput(firstVariantRaw);
+  const variantBase = Number(parsedVariantBase);
+  if (Number.isFinite(variantBase) && variantBase > 0) {
+    return Math.round(variantBase);
+  }
+
+  const fallback = Number(product?.oldPrice);
+  if (!Number.isFinite(fallback) || fallback <= 0) return null;
+  return Math.round(fallback);
+}
+
 function hasVisibleOldPrice(product) {
-  const oldPrice = Number(product?.oldPrice);
+  const oldPrice = Number(getProductBaseOldPriceForDisplay(product));
   const firstVariantRaw = Array.isArray(product?.variantPrices) ? product.variantPrices[0] : null;
   const parsedVariantBase = parseVariantPriceInput(firstVariantRaw);
   const variantBase = Number(parsedVariantBase);
@@ -1127,7 +1156,6 @@ function openModal(product = null) {
   const productId = document.getElementById("productId");
   const name = document.getElementById("name");
   const sku = document.getElementById("sku");
-  const oldPrice = document.getElementById("oldPrice");
   const stock = document.getElementById("stock");
   const category = document.getElementById("category");
   const imageUrl = document.getElementById("imageUrl");
@@ -1141,7 +1169,6 @@ function openModal(product = null) {
     if (productId) productId.value = product.id;
     if (name) name.value = product.name || "";
     if (sku) sku.value = product.sku || "";
-    if (oldPrice) oldPrice.value = hasVisibleOldPrice(product) ? String(product.oldPrice) : "";
     if (stock) stock.value = product.stock || "";
     if (category) {
       const nextCategory = normalizeCategoryLabel(product.category || "");
@@ -1167,8 +1194,11 @@ function openModal(product = null) {
     const rowPrices = Array.isArray(product.variantPrices)
       ? product.variantPrices
       : [];
+    const rowOldPrices = Array.isArray(product.variantOldPrices)
+      ? product.variantOldPrices
+      : [];
     const fallbackStock = Number(product.stock || 0);
-    const rowCount = Math.max(images.length, names.length, rowStocks.length, rowCutLengths.length, rowPrices.length, 1);
+    const rowCount = Math.max(images.length, names.length, rowStocks.length, rowCutLengths.length, rowPrices.length, rowOldPrices.length, 1);
     for (let index = 0; index < rowCount; index += 1) {
       const parsedName = splitVariantNameAndLength(names[index]);
       const nameValue = String(parsedName.name || "").trim() || `Màu ${index + 1}`;
@@ -1177,6 +1207,8 @@ function openModal(product = null) {
       const rowCutLengthValue = parseVariantLengthInput(rowCutLengths[index]);
       const fallbackRowPrice = index === 0 ? parseVariantPriceInput(product.price) : null;
       const rowPriceValue = parseVariantPriceInput(rowPrices[index] ?? fallbackRowPrice);
+      const fallbackRowOldPrice = index === 0 ? parseVariantPriceInput(product.oldPrice) : null;
+      const rowOldPriceValue = parseVariantPriceInput(rowOldPrices[index] ?? fallbackRowOldPrice);
       const stocksValue = Number.isFinite(Number(rowStockValue))
         ? Number(rowStockValue)
         : (rowStockValue && typeof rowStockValue === "object"
@@ -1185,7 +1217,7 @@ function openModal(product = null) {
                 return Number.isFinite(n) ? Math.round((sum + Math.max(0, Math.round(n * 100) / 100)) * 100) / 100 : sum;
               }, 0)
             : fallbackStock);
-      variantRowsData.push(createVariantRowData(nameValue, imageUrlValue, stocksValue, Number.isFinite(rowCutLengthValue) ? rowCutLengthValue : parsedName.cutLength, rowPriceValue));
+      variantRowsData.push(createVariantRowData(nameValue, imageUrlValue, stocksValue, Number.isFinite(rowCutLengthValue) ? rowCutLengthValue : parsedName.cutLength, rowPriceValue, rowOldPriceValue));
     }
     renderVariantRows();
     updateVariantFilesHint();
@@ -1302,7 +1334,7 @@ async function load() {
           <td>
             <div class="price-cell">
               <span class="price-live">${Number(basePrice || 0).toLocaleString()}đ</span>
-              ${hasVisibleOldPrice(p) ? `<span class="price-old">${Number(p.oldPrice).toLocaleString()}đ</span>` : ""}
+              ${hasVisibleOldPrice(p) ? `<span class="price-old">${Number(getProductBaseOldPriceForDisplay(p)).toLocaleString()}đ</span>` : ""}
             </div>
           </td>
           <td>
@@ -1405,7 +1437,6 @@ async function saveProduct() {
   const name = document.getElementById("name").value.trim();
   const sku = document.getElementById("sku").value.trim();
   const category = document.getElementById("category").value;
-  const oldPrice = document.getElementById("oldPrice").value;
   const stock = document.getElementById("stock").value;
   const productId = document.getElementById("productId").value;
   const saveBtn = document.querySelector(".btn-save");
@@ -1435,6 +1466,7 @@ async function saveProduct() {
         name: String(row.name || "").trim() || `Màu ${index + 1}`,
         cutLength: parseVariantLengthInput(row.cutLength),
         variantPrice: parseVariantPriceInput(row.variantPrice),
+        variantOldPrice: parseVariantPriceInput(row.variantOldPrice),
         colorStock: Number.isFinite(Number(row.colorStock))
           ? Math.max(0, Math.round(Number(row.colorStock) * 100) / 100)
           : null
@@ -1444,8 +1476,9 @@ async function saveProduct() {
         const hasName = Boolean(String(row.name || "").trim());
         const hasLength = Number.isFinite(Number(row.cutLength));
         const hasPrice = Number.isFinite(Number(row.variantPrice));
+        const hasOldPrice = Number.isFinite(Number(row.variantOldPrice));
         const hasStock = Number.isFinite(Number(row.colorStock));
-        return hasImage || hasName || hasLength || hasPrice || hasStock;
+        return hasImage || hasName || hasLength || hasPrice || hasOldPrice || hasStock;
       });
 
     const uploadedVariantImages = await Promise.all(
@@ -1469,6 +1502,7 @@ async function saveProduct() {
         name: composeVariantName(row, index),
         image: uploadedVariantImages[index] || row.existingUrl || fallbackExistingImages[index] || baseVariantImage,
         variantPrice: Number.isFinite(Number(row.variantPrice)) ? Math.max(0, Math.round(Number(row.variantPrice))) : null,
+        variantOldPrice: Number.isFinite(Number(row.variantOldPrice)) ? Math.max(0, Math.round(Number(row.variantOldPrice))) : null,
         colorStock: Number.isFinite(Number(row.colorStock)) ? Math.max(0, Math.round(Number(row.colorStock) * 100) / 100) : null
       }));
 
@@ -1496,6 +1530,15 @@ async function saveProduct() {
       : images.map((_, index) => {
           const existingValue = Array.isArray(existingProduct?.variantPrices) ? existingProduct.variantPrices[index] : null;
           const parsed = parseVariantPriceInput(existingValue);
+          return Number.isFinite(Number(parsed)) ? parsed : null;
+        });
+
+    const variantOldPrices = finalVariantRows.length
+      ? finalVariantRows.map((row) => (Number.isFinite(Number(row.variantOldPrice)) ? Math.max(0, Math.round(Number(row.variantOldPrice))) : null))
+      : images.map((_, index) => {
+          const existingValue = Array.isArray(existingProduct?.variantOldPrices) ? existingProduct.variantOldPrices[index] : null;
+          const fallbackValue = index === 0 ? existingProduct?.oldPrice : null;
+          const parsed = parseVariantPriceInput(existingValue ?? fallbackValue);
           return Number.isFinite(Number(parsed)) ? parsed : null;
         });
 
@@ -1534,7 +1577,7 @@ async function saveProduct() {
     const res = await fetch(API + (isEditing ? `/product/${productId}` : "/product/add"), {
       method: isEditing ? "PUT" : "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, sku, category, price: Math.round(basePriceFromFirstVariant), oldPrice, stock: stockValueForSave, image: finalImage, images, variantNames, variantPrices, variantCutLengths, sizes, variantSizes, variantColorStocks })
+      body: JSON.stringify({ name, sku, category, price: Math.round(basePriceFromFirstVariant), oldPrice: variantOldPrices[0] ?? null, stock: stockValueForSave, image: finalImage, images, variantNames, variantPrices, variantOldPrices, variantCutLengths, sizes, variantSizes, variantColorStocks })
     });
     const data = await res.json();
 
@@ -1861,6 +1904,7 @@ window.onVariantFileChange = onVariantFileChange;
 window.onVariantNameInput = onVariantNameInput;
 window.onVariantLengthInput = onVariantLengthInput;
 window.onVariantPriceInput = onVariantPriceInput;
+window.onVariantOldPriceInput = onVariantOldPriceInput;
 window.onVariantStocksInput = onVariantStocksInput;
 window.saveProduct = saveProduct;
 window.load = load;

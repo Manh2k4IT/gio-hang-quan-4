@@ -842,10 +842,16 @@ function normalizeProductOrder() {
         product.variantStocks = normalizeVariantStocks(product.variantStocks, variantRowCount);
         product.variantColorStocks = normalizeVariantStocks(product.variantColorStocks, variantRowCount);
         product.variantPrices = normalizeVariantPrices(product.variantPrices, variantRowCount);
+        product.variantOldPrices = normalizeVariantOldPrices(product.variantOldPrices, variantRowCount);
         const firstVariantPriceRaw = Array.isArray(product.variantPrices) ? product.variantPrices[0] : null;
         const firstVariantPrice = Number(firstVariantPriceRaw);
         if (firstVariantPriceRaw !== null && firstVariantPriceRaw !== undefined && String(firstVariantPriceRaw).trim() !== "" && Number.isFinite(firstVariantPrice) && firstVariantPrice >= 0) {
             product.price = Math.round(firstVariantPrice);
+        }
+        const firstVariantOldPriceRaw = Array.isArray(product.variantOldPrices) ? product.variantOldPrices[0] : null;
+        const firstVariantOldPrice = Number(firstVariantOldPriceRaw);
+        if (firstVariantOldPriceRaw !== null && firstVariantOldPriceRaw !== undefined && String(firstVariantOldPriceRaw).trim() !== "" && Number.isFinite(firstVariantOldPrice) && firstVariantOldPrice > 0) {
+            product.oldPrice = Math.round(firstVariantOldPrice);
         }
         const normalizedCutLengths = normalizeVariantCutLengths(product.variantCutLengths, variantRowCount);
         product.variantCutLengths = normalizedCutLengths.map((value, index) => {
@@ -1205,6 +1211,7 @@ function getProductVariantRowCount(product, fallback = 1) {
     const variantStocks = Array.isArray(product?.variantStocks) ? product.variantStocks : [];
     const variantSizes = Array.isArray(product?.variantSizes) ? product.variantSizes : [];
     const variantPrices = Array.isArray(product?.variantPrices) ? product.variantPrices : [];
+    const variantOldPrices = Array.isArray(product?.variantOldPrices) ? product.variantOldPrices : [];
     const variantCutLengths = Array.isArray(product?.variantCutLengths) ? product.variantCutLengths : [];
 
     return Math.max(
@@ -1215,6 +1222,7 @@ function getProductVariantRowCount(product, fallback = 1) {
         variantStocks.length,
         variantSizes.length,
         variantPrices.length,
+        variantOldPrices.length,
         variantCutLengths.length,
         1
     );
@@ -1324,6 +1332,12 @@ function normalizeVariantPrices(value, variantCount = 0) {
         if (!Number.isFinite(amount) || amount < 0) return null;
         return Math.round(amount);
     });
+
+}
+
+function normalizeVariantOldPrices(value, variantCount = 0) {
+
+    return normalizeVariantPrices(value, variantCount);
 
 }
 
@@ -1497,6 +1511,28 @@ function getVariantUnitPrice(product, variantIndex) {
     }
 
     return Math.round(fallback);
+
+}
+
+function getVariantUnitOldPrice(product, variantIndex) {
+
+    const index = Math.max(0, Number(variantIndex) || 0);
+    const fallback = normalizeOptionalOldPrice(product?.oldPrice, null);
+    const unitPrice = getVariantUnitPrice(product, index);
+    const variantCount = getProductVariantRowCount(product, 1);
+    const prices = normalizeVariantOldPrices(product?.variantOldPrices, variantCount);
+    const rawCandidate = prices[index];
+    const candidate = Number(rawCandidate);
+
+    if (rawCandidate !== null && rawCandidate !== undefined && String(rawCandidate).trim() !== "" && Number.isFinite(candidate) && candidate > 0) {
+        return Math.round(candidate);
+    }
+
+    if (Number.isFinite(Number(fallback)) && Number(fallback) > 0) {
+        return Math.round(Number(fallback));
+    }
+
+    return Math.round(unitPrice);
 
 }
 
@@ -1858,6 +1894,7 @@ function getSortedCart(category = "", sessionId = "") {
             const itemVariantKey = item.variantKey || buildVariantKey(itemVariantName, itemImage);
             const itemVariantIndex = getVariantIndex(product, itemImage, itemVariantName);
             const itemUnitPrice = getVariantUnitPrice(product, itemVariantIndex);
+            const itemUnitOldPrice = getVariantUnitOldPrice(product, itemVariantIndex);
             const availableSizes = getAvailableSizesByVariant(product, itemVariantIndex);
             const fallbackSize = resolveSelectedSizeByVariant(product, itemVariantIndex, item.selectedSize);
             const selectedSize = item.selectedSize || fallbackSize;
@@ -1872,7 +1909,7 @@ function getSortedCart(category = "", sessionId = "") {
                 sku: item.sku || product.sku || "",
                 category: getProductCategory(product),
                 price: normalizeNumberValue(itemUnitPrice, 0),
-                oldPrice: normalizeNumberValue(product.oldPrice, normalizeNumberValue(itemUnitPrice, 0)),
+                oldPrice: normalizeNumberValue(itemUnitOldPrice, normalizeNumberValue(itemUnitPrice, 0)),
                 image: itemImage,
                 variantName: itemVariantName,
                 variantKey: itemVariantKey,
@@ -2543,6 +2580,8 @@ app.post("/product/add", (req, res) => {
 
         variantPrices,
 
+        variantOldPrices,
+
         sizes,
 
         variantSizes,
@@ -2584,6 +2623,7 @@ app.post("/product/add", (req, res) => {
         mergedImages.length,
         rawVariantNames.length,
         Array.isArray(variantPrices) ? variantPrices.length : 0,
+        Array.isArray(variantOldPrices) ? variantOldPrices.length : 0,
         Array.isArray(variantColorStocks) ? variantColorStocks.length : 0,
         Array.isArray(variantStocks) ? variantStocks.length : 0,
         1
@@ -2596,11 +2636,17 @@ app.post("/product/add", (req, res) => {
     });
     const normalizedVariantStocks = normalizeVariantStocks(variantColorStocks !== undefined ? variantColorStocks : variantStocks, variantRowCount);
     const normalizedVariantPrices = normalizeVariantPrices(variantPrices, variantRowCount);
+    const normalizedVariantOldPrices = normalizeVariantOldPrices(variantOldPrices, variantRowCount);
     const firstVariantPriceRaw = normalizedVariantPrices[0];
     const firstVariantPrice = Number(firstVariantPriceRaw);
     const basePriceValue = firstVariantPriceRaw !== null && firstVariantPriceRaw !== undefined && String(firstVariantPriceRaw).trim() !== "" && Number.isFinite(firstVariantPrice) && firstVariantPrice >= 0
         ? Math.round(firstVariantPrice)
         : priceValue;
+    const firstVariantOldPriceRaw = normalizedVariantOldPrices[0];
+    const firstVariantOldPrice = Number(firstVariantOldPriceRaw);
+    const baseOldPriceValue = firstVariantOldPriceRaw !== null && firstVariantOldPriceRaw !== undefined && String(firstVariantOldPriceRaw).trim() !== "" && Number.isFinite(firstVariantOldPrice) && firstVariantOldPrice > 0
+        ? Math.round(firstVariantOldPrice)
+        : oldPriceValue;
     const normalizedVariantCutLengths = normalizeVariantCutLengths(variantCutLengths, variantRowCount)
         .map((value, index) => {
             if (Number.isFinite(Number(value)) && Number(value) > 0) {
@@ -2619,7 +2665,7 @@ app.post("/product/add", (req, res) => {
         sku: skuValue,
         price: basePriceValue,
 
-        oldPrice: oldPriceValue,
+        oldPrice: baseOldPriceValue,
 
         stock: stockValue,
 
@@ -2631,6 +2677,7 @@ app.post("/product/add", (req, res) => {
         variantStocks: normalizedVariantStocks,
         variantColorStocks: normalizedVariantStocks,
         variantPrices: normalizedVariantPrices,
+        variantOldPrices: normalizedVariantOldPrices,
         variantCutLengths: normalizedVariantCutLengths,
         sortOrder: getNextSortOrder(),
 
@@ -2691,6 +2738,8 @@ app.put("/product/:id", (req, res) => {
 
         variantPrices,
 
+        variantOldPrices,
+
         sizes,
 
         variantSizes,
@@ -2739,6 +2788,7 @@ app.put("/product/:id", (req, res) => {
             mergedImages.length,
             rawNames.length,
             Array.isArray(product.variantPrices) ? product.variantPrices.length : 0,
+            Array.isArray(product.variantOldPrices) ? product.variantOldPrices.length : 0,
             Array.isArray(product.variantColorStocks) ? product.variantColorStocks.length : 0,
             Array.isArray(product.variantStocks) ? product.variantStocks.length : 0,
             1
@@ -2751,6 +2801,7 @@ app.put("/product/:id", (req, res) => {
         product.variantStocks = normalizeVariantStocks(product.variantStocks, variantRowCount);
         product.variantColorStocks = normalizeVariantStocks(product.variantColorStocks, variantRowCount);
         product.variantPrices = normalizeVariantPrices(product.variantPrices, variantRowCount);
+        product.variantOldPrices = normalizeVariantOldPrices(product.variantOldPrices, variantRowCount);
         product.variantCutLengths = normalizeVariantCutLengths(product.variantCutLengths, variantRowCount)
             .map((value, index) => {
                 if (Number.isFinite(Number(value)) && Number(value) > 0) {
@@ -2785,6 +2836,10 @@ app.put("/product/:id", (req, res) => {
         const variantRowCount = getProductVariantRowCount(product, Array.isArray(variantPrices) ? variantPrices.length : 1);
         product.variantPrices = normalizeVariantPrices(variantPrices, variantRowCount);
     }
+    if (variantOldPrices !== undefined) {
+        const variantRowCount = getProductVariantRowCount(product, Array.isArray(variantOldPrices) ? variantOldPrices.length : 1);
+        product.variantOldPrices = normalizeVariantOldPrices(variantOldPrices, variantRowCount);
+    }
     if (variantCutLengths !== undefined) {
         const variantRowCount = getProductVariantRowCount(product, Array.isArray(variantCutLengths) ? variantCutLengths.length : 1);
         product.variantCutLengths = normalizeVariantCutLengths(variantCutLengths, variantRowCount)
@@ -2802,6 +2857,11 @@ app.put("/product/:id", (req, res) => {
     const firstVariantPrice = Number(firstVariantPriceRaw);
     if (firstVariantPriceRaw !== null && firstVariantPriceRaw !== undefined && String(firstVariantPriceRaw).trim() !== "" && Number.isFinite(firstVariantPrice) && firstVariantPrice >= 0) {
         product.price = Math.round(firstVariantPrice);
+    }
+    const firstVariantOldPriceRaw = Array.isArray(product.variantOldPrices) ? product.variantOldPrices[0] : null;
+    const firstVariantOldPrice = Number(firstVariantOldPriceRaw);
+    if (firstVariantOldPriceRaw !== null && firstVariantOldPriceRaw !== undefined && String(firstVariantOldPriceRaw).trim() !== "" && Number.isFinite(firstVariantOldPrice) && firstVariantOldPrice > 0) {
+        product.oldPrice = Math.round(firstVariantOldPrice);
     }
 
     syncProductStockWithVariantStocks(product);
@@ -3276,6 +3336,7 @@ app.post("/add", (req, res) => {
     let effectiveVariantKey = buildVariantKey(effectiveVariantName, effectiveImage);
     let effectiveVariantIndex = getVariantIndex(product, effectiveImage, effectiveVariantName);
     let effectiveUnitPrice = getVariantUnitPrice(product, effectiveVariantIndex);
+    let effectiveUnitOldPrice = getVariantUnitOldPrice(product, effectiveVariantIndex);
     let effectiveSize = resolveSelectedSizeByVariant(product, effectiveVariantIndex, requestedSize);
     let effectiveStockInfo = getVariantStockInfo(product, effectiveVariantIndex, effectiveSize);
     let effectiveSizeKey = buildSizeKey(effectiveSize);
@@ -3300,6 +3361,7 @@ app.post("/add", (req, res) => {
             effectiveVariantKey = fallbackVariant.variantKey;
             effectiveVariantIndex = fallbackVariant.variantIndex;
             effectiveUnitPrice = getVariantUnitPrice(product, effectiveVariantIndex);
+            effectiveUnitOldPrice = getVariantUnitOldPrice(product, effectiveVariantIndex);
             effectiveSize = fallbackVariant.size;
             effectiveStockInfo = fallbackVariant.stockInfo;
             effectiveSizeKey = buildSizeKey(effectiveSize);
@@ -3337,7 +3399,7 @@ app.post("/add", (req, res) => {
 
         item.qty++;
         item.price = effectiveUnitPrice;
-        item.oldPrice = product.oldPrice ?? product.price;
+        item.oldPrice = effectiveUnitOldPrice;
         item.sku = product.sku || item.sku || "";
         item.category = getProductCategory(product);
         item.image = effectiveImage || item.image || product.image;
@@ -3360,7 +3422,7 @@ app.post("/add", (req, res) => {
             category: getProductCategory(product),
             price: effectiveUnitPrice,
 
-            oldPrice: product.oldPrice ?? product.price,
+            oldPrice: effectiveUnitOldPrice,
 
             image: effectiveImage,
             variantName: effectiveVariantName,
@@ -3493,6 +3555,7 @@ app.post("/change", (req, res) => {
     const nextVariantKey = buildVariantKey(nextVariantName, nextImage);
     const nextVariantIndex = getVariantIndex(product, nextImage, nextVariantName);
     const nextUnitPrice = getVariantUnitPrice(product, nextVariantIndex);
+    const nextUnitOldPrice = getVariantUnitOldPrice(product, nextVariantIndex);
     const nextSize = resolveSelectedSizeByVariant(product, nextVariantIndex, requestedSize || item.selectedSize || "");
     const nextStockInfo = getVariantStockInfo(product, nextVariantIndex, nextSize);
     const nextSizeKey = buildSizeKey(nextSize);
@@ -3526,7 +3589,7 @@ app.post("/change", (req, res) => {
 
             duplicateItem.qty = mergedQty;
             duplicateItem.price = nextUnitPrice;
-            duplicateItem.oldPrice = product.oldPrice ?? product.price;
+            duplicateItem.oldPrice = nextUnitOldPrice;
             duplicateItem.sku = product.sku || duplicateItem.sku || "";
             duplicateItem.category = getProductCategory(product);
             duplicateItem.image = nextImage;
@@ -3545,7 +3608,7 @@ app.post("/change", (req, res) => {
 
     item.image = nextImage;
     item.price = nextUnitPrice;
-    item.oldPrice = product.oldPrice ?? product.price;
+    item.oldPrice = nextUnitOldPrice;
     item.variantName = nextVariantName;
     item.variantKey = nextVariantKey;
     item.selectedSize = nextSize;

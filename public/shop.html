@@ -1651,6 +1651,23 @@
       return Math.max(0, Math.round(raw));
     }
 
+    function getVariantOldPrice(product, variantIndex) {
+      const safeIndex = Math.max(0, Number(variantIndex) || 0);
+      const fallback = Number(product?.oldPrice || 0);
+
+      if (!Array.isArray(product?.variantOldPrices)) {
+        return Number.isFinite(fallback) && fallback > 0 ? Math.max(0, Math.round(fallback)) : null;
+      }
+
+      const rawValue = product.variantOldPrices[safeIndex];
+      const raw = Number(rawValue);
+      if (rawValue === null || rawValue === undefined || String(rawValue).trim() === "" || !Number.isFinite(raw) || raw <= 0) {
+        return Number.isFinite(fallback) && fallback > 0 ? Math.max(0, Math.round(fallback)) : null;
+      }
+
+      return Math.max(0, Math.round(raw));
+    }
+
     function getVariantStockMatrix(product) {
       const source = Array.isArray(product?.variantColorStocks)
         ? product.variantColorStocks
@@ -2318,6 +2335,9 @@
 
       const html = displayProducts.map((p) => {
         const productCategory = normalizeCategory(p.category);
+        const productVariantIndex = getPreferredInStockVariantIndex(p, Number(p.id));
+        const cardPrice = Number(getVariantPrice(p, productVariantIndex));
+        const cardOldPrice = Number(getVariantOldPrice(p, productVariantIndex) ?? cardPrice);
         return `
           <div class="product-card">
             <div class="product-image-wrap">
@@ -2329,8 +2349,8 @@
             <div class="product-meta product-stock">Tồn kho: ${formatVariantStockDisplay(p, getPreferredInStockVariantIndex(p, Number(p.id)), Number(p.stock || 0))}</div>
             <div class="price-row">
               <div class="price-block">
-                <span class="price">${Number(p.price || 0).toLocaleString()}đ</span>
-                ${Number(p.oldPrice) > Number(p.price || 0) ? `<span class="price-old">${Number(p.oldPrice).toLocaleString()}đ</span>` : ""}
+                <span class="price">${cardPrice.toLocaleString()}đ</span>
+                ${cardOldPrice > cardPrice ? `<span class="price-old">${cardOldPrice.toLocaleString()}đ</span>` : ""}
               </div>
               <div class="product-actions">
                 <button class="btn btn-primary" onclick="add(${p.id})">+ Thêm</button>
@@ -2579,7 +2599,7 @@
         );
         const variantPrice = getVariantPrice(product || item, selectedVariantIndex);
         const price = Number(variantPrice ?? item.price ?? product?.price ?? 0);
-        const oldPrice = Number(item.oldPrice ?? product?.oldPrice ?? price);
+        const oldPrice = Number(getVariantOldPrice(product || item, selectedVariantIndex) ?? item.oldPrice ?? product?.oldPrice ?? price);
         const discountPercent = oldPrice > price ? Math.round((1 - price / oldPrice) * 100) : 0;
         const selectedVariantImage = variants[selectedVariantIndex] || item.image || product?.image || "https://placehold.co/80x80?text=No+Image";
         const selectedVariantName = item.variantName || getVariantDisplayName(product || item, selectedVariantIndex, selectedVariantImage);
@@ -2916,7 +2936,7 @@
                 ? selectedVariantIndexByImage
                 : (selectedVariantIndexByName >= 0 ? selectedVariantIndexByName : 0);
               const unitPrice = Number(getVariantPrice(product || item, selectedVariantIndex) ?? item.price ?? product?.price ?? 0);
-              const unitOldPrice = Number(item.oldPrice ?? product?.oldPrice ?? unitPrice);
+              const unitOldPrice = Number(getVariantOldPrice(product || item, selectedVariantIndex) ?? item.oldPrice ?? product?.oldPrice ?? unitPrice);
               const selectedVariantName = item.variantName || getVariantDisplayName(product || item, selectedVariantIndex, variants[selectedVariantIndex] || item.image || "");
               const cutLengthMeters = getVariantCutLength(product || item, selectedVariantIndex, selectedVariantName || item.variantName || "");
               const qtyDisplay = formatCartQtyDisplay(item.qty, cutLengthMeters);
@@ -3011,7 +3031,7 @@
       const selectedSize = quickOrderState.size || sizes[0] || "";
       const stock = getColorStockByVariant(product, selectedVariantIndex, Number(product?.stock || 0));
       const price = Number(getVariantPrice(product, selectedVariantIndex));
-      const oldPrice = Number(product?.oldPrice || price);
+      const oldPrice = Number(getVariantOldPrice(product, selectedVariantIndex) ?? product?.oldPrice ?? price);
       const lineTotal = price * Math.max(1, Number(quickOrderState.qty || 1));
       const shippingFee = getShippingFee(lineTotal);
       const finalTotal = lineTotal + shippingFee;
