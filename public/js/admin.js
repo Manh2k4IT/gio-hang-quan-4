@@ -231,6 +231,49 @@ function clearProductFormAlert() {
   setProductFormAlert("");
 }
 
+async function readApiResponseSafely(res) {
+  const raw = await res.text();
+  const contentType = String(res.headers.get("content-type") || "").toLowerCase();
+  const requestId = String(
+    res.headers.get("x-request-id")
+      || res.headers.get("cf-ray")
+      || ""
+  ).trim();
+  const isHtmlResponse = contentType.includes("text/html") || /<!doctype html|<html[\s>]/i.test(raw || "");
+  let data = {};
+
+  if (!isHtmlResponse) {
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch (parseError) {
+      data = {};
+    }
+  }
+
+  return { raw, data, isHtmlResponse, requestId };
+}
+
+function getApiErrorMessage(res, raw, data, fallback, requestId = "") {
+  const responseRequestId = String(requestId || data?.requestId || "").trim();
+  const appendRequestId = (message) => responseRequestId ? `${message} (mã: ${responseRequestId})` : message;
+
+  if (data && typeof data.error === "string" && data.error.trim()) {
+    return appendRequestId(data.error.trim());
+  }
+
+  const isGatewayError = Number(res?.status) === 502 || /cloudflare|bad gateway|host error/i.test(String(raw || ""));
+  if (isGatewayError) {
+    return appendRequestId("Server đang bị lỗi 502 (gateway/hosting), vui lòng thử lại sau ít phút");
+  }
+
+  const status = Number(res?.status);
+  if (Number.isFinite(status) && status > 0) {
+    return appendRequestId(`${fallback} (HTTP ${status})`);
+  }
+
+  return appendRequestId(fallback);
+}
+
 function formatVariantLength(length) {
   const safe = Number(length);
   if (!Number.isFinite(safe) || safe <= 0) return "";
@@ -1036,8 +1079,11 @@ function applyBrandLogo(logoUrl) {
 async function loadBrandSettings() {
   try {
     const res = await fetch(API + "/settings");
-    const data = await res.json();
-    if (!res.ok) return;
+    const { raw, data, requestId } = await readApiResponseSafely(res);
+    if (!res.ok) {
+      showToast(getApiErrorMessage(res, raw, data, "Không thể tải cài đặt", requestId));
+      return;
+    }
     applyBrandLogo(data.shopLogo);
     shopPublicUrl = sanitizeOrigin(data.shopPublicUrl) || DEFAULT_PUBLIC_SHOP_URL;
     syncCategoryUi();
@@ -1334,7 +1380,11 @@ async function load() {
   try {
     const productsUrl = category ? `${API}/products/all?category=${encodeURIComponent(category)}` : `${API}/products/all`;
     const res = await fetch(productsUrl);
-    const data = await res.json();
+    const { raw, data, requestId } = await readApiResponseSafely(res);
+    if (!res.ok) {
+      showToast(getApiErrorMessage(res, raw, data, "Không thể tải danh sách sản phẩm", requestId));
+      return;
+    }
     const normalizedCurrentCategory = normalizeCategoryKey(category);
     const sourceData = Array.isArray(data) ? data : [];
     syncCategoryUi();
@@ -1672,16 +1722,10 @@ async function saveProduct() {
       if (saveTimeoutId) clearTimeout(saveTimeoutId);
     }
 
-    const raw = await res.text();
-    let data = {};
-    try {
-      data = raw ? JSON.parse(raw) : {};
-    } catch (parseError) {
-      data = { error: raw || "Phản hồi lưu sản phẩm không hợp lệ" };
-    }
+    const { raw, data, requestId } = await readApiResponseSafely(res);
 
     if (!res.ok) {
-      setProductFormAlert(data.error || "Không thể lưu sản phẩm");
+      setProductFormAlert(getApiErrorMessage(res, raw, data, "Không thể lưu sản phẩm", requestId));
       return;
     }
 
@@ -1704,7 +1748,11 @@ async function saveProduct() {
 async function loadOrders() {
   try {
     const res = await fetch(API + "/orders");
-    const rawData = await res.json();
+    const { raw, data: rawData, requestId } = await readApiResponseSafely(res);
+    if (!res.ok) {
+      showToast(getApiErrorMessage(res, raw, rawData, "Không thể tải danh sách đơn hàng", requestId));
+      return;
+    }
     const data = Array.isArray(rawData) ? rawData : [];
     state.orders = data;
     populateCustomerDataYearOptions(data);

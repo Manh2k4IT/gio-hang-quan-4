@@ -35,7 +35,10 @@ const uploadsCacheMaxAgeSec = Math.max(60, Number(process.env.UPLOADS_CACHE_MAX_
 const maxInflightRequests = Math.max(50, Number(process.env.MAX_INFLIGHT_REQUESTS) || 800);
 const cartSessionCookieName = process.env.CART_SESSION_COOKIE || "live_shop_sid";
 const cartSessionMaxAgeMs = Math.max(60_000, Number(process.env.CART_SESSION_MAX_AGE_MS) || (30 * 24 * 60 * 60 * 1000));
+const diagnosticsRecentLimit = Math.max(20, Number(process.env.DIAGNOSTICS_RECENT_LIMIT) || 120);
 let inflightRequests = 0;
+const recentWriteEvents = [];
+const recentServerErrors = [];
 
 app.set("trust proxy", 1);
 
@@ -44,9 +47,71 @@ app.use(compression({ threshold: compressionThresholdBytes }));
 app.use(express.json({ limit: requestJsonLimit }));
 app.use(express.urlencoded({ extended: false, limit: requestJsonLimit }));
 
+function buildRequestId() {
+    return `req_${Date.now().toString(36)}_${crypto.randomBytes(4).toString("hex")}`;
+}
+
+function pushRecentLimited(list, record) {
+    list.push(record);
+    if (list.length <= diagnosticsRecentLimit) return;
+    list.splice(0, list.length - diagnosticsRecentLimit);
+}
+
+function recordServerError(error, req = null) {
+    const message = String(error?.message || error || "Unknown error");
+    const stackPreview = String(error?.stack || "")
+        .split("\n")
+        .slice(0, 6)
+        .join("\n");
+
+    pushRecentLimited(recentServerErrors, {
+        ts: new Date().toISOString(),
+        requestId: String(req?.requestId || ""),
+        method: String(req?.method || ""),
+        path: String(req?.originalUrl || req?.url || ""),
+        message,
+        stack: stackPreview
+    });
+}
+
+app.use((req, res, next) => {
+    const incomingRequestId = String(req.headers["x-request-id"] || req.headers["cf-ray"] || "").trim();
+    const requestId = /^[a-zA-Z0-9._:-]{6,120}$/.test(incomingRequestId)
+        ? incomingRequestId
+        : buildRequestId();
+
+    req.requestId = requestId;
+    res.setHeader("X-Request-Id", requestId);
+
+    const startedAt = Date.now();
+    res.on("finish", () => {
+        const method = String(req.method || "").toUpperCase();
+        const isWriteMethod = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+        const routePath = String(req.path || "");
+        const isWriteRoute = /^\/(product|order|settings|upload|add|change)(\/|$)/.test(routePath);
+
+        if (!isWriteMethod || !isWriteRoute) return;
+
+        pushRecentLimited(recentWriteEvents, {
+            ts: new Date().toISOString(),
+            requestId,
+            method,
+            path: String(req.originalUrl || req.url || routePath),
+            status: Number(res.statusCode) || 0,
+            durationMs: Math.max(0, Date.now() - startedAt),
+            inflightRequests
+        });
+    });
+
+    next();
+});
+
 app.use((req, res, next) => {
     if (inflightRequests >= maxInflightRequests) {
-        return res.status(503).json({ error: "Server đang quá tải, vui lòng thử lại" });
+        return res.status(503).json({
+            error: "Server đang quá tải, vui lòng thử lại",
+            requestId: req.requestId
+        });
     }
 
     inflightRequests += 1;
@@ -283,7 +348,10 @@ const checkoutLimiter = rateLimit({
 
 app.use((err, req, res, next) => {
     if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
-        return res.status(400).json({ error: "Dữ liệu JSON không hợp lệ" });
+        return res.status(400).json({
+            error: "Dữ liệu JSON không hợp lệ",
+            requestId: req.requestId
+        });
     }
 
     next(err);
@@ -2165,15 +2233,34 @@ app.get("/health", (req, res) => {
 
     res.json({
         ok: true,
+        requestId: req.requestId,
         ts: Date.now(),
         uptimeSec: Math.floor(process.uptime()),
         products: Array.isArray(products) ? products.length : 0,
         orders: Array.isArray(orders) ? orders.length : 0,
         inflightRequests,
+        recentWriteEvents: recentWriteEvents.length,
+        recentServerErrors: recentServerErrors.length,
         memRssMb: Math.round((memory.rss / (1024 * 1024)) * 10) / 10,
         memHeapUsedMb: Math.round((memory.heapUsed / (1024 * 1024)) * 10) / 10
     });
 
+});
+
+app.get("/diagnostics/save-health", (req, res) => {
+    const memory = process.memoryUsage();
+
+    res.json({
+        ok: true,
+        requestId: req.requestId,
+        ts: Date.now(),
+        uptimeSec: Math.floor(process.uptime()),
+        inflightRequests,
+        memRssMb: Math.round((memory.rss / (1024 * 1024)) * 10) / 10,
+        memHeapUsedMb: Math.round((memory.heapUsed / (1024 * 1024)) * 10) / 10,
+        recentWriteEvents: [...recentWriteEvents].reverse(),
+        recentServerErrors: [...recentServerErrors].reverse()
+    });
 });
 
 app.get("/settings", (req, res) => {
@@ -3669,6 +3756,20 @@ io.on("connection", socket => {
 
 });
 
+app.use((err, req, res, next) => {
+    recordServerError(err, req);
+    console.error(`[${String(req?.requestId || "no-request-id")}]`, err);
+
+    if (res.headersSent) {
+        return next(err);
+    }
+
+    res.status(500).json({
+        error: "Lỗi máy chủ, vui lòng thử lại",
+        requestId: req.requestId
+    });
+});
+
 /* ===========================
    SERVER
 =========================== */
@@ -3741,11 +3842,13 @@ process.on("SIGTERM", () => {
 
 process.on("unhandledRejection", (reason) => {
     console.error("UnhandledRejection:", reason);
+    recordServerError(reason);
     gracefulShutdown("unhandledRejection");
 });
 
 process.on("uncaughtException", (error) => {
     console.error("UncaughtException:", error);
+    recordServerError(error);
     gracefulShutdown("uncaughtException");
 });
 
