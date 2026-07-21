@@ -5,9 +5,9 @@ const state = { products: [], orders: [] };
 const DEFAULT_SHOP_LOGO = "/uploads/logogusa.jpg";
 const DEFAULT_PUBLIC_SHOP_URL = "";
 const DEFAULT_UPLOAD_MAX_FILE_SIZE_MB = 12;
-const CLIENT_IMAGE_MAX_DIMENSION_PX = 1800;
-const CLIENT_IMAGE_MIN_COMPRESS_BYTES = 250 * 1024;
-const CLIENT_IMAGE_QUALITY_STEPS = [0.9, 0.84, 0.78, 0.72];
+const CLIENT_IMAGE_MAX_DIMENSION_PX = 2000;
+const CLIENT_IMAGE_MIN_COMPRESS_BYTES = 700 * 1024;
+const CLIENT_IMAGE_QUALITY_STEPS = [0.92, 0.9, 0.88, 0.86];
 let productSortable = null;
 const FIXED_PRODUCT_CATEGORIES = [
   "LINEN TƯNG",
@@ -309,13 +309,13 @@ function getFileIdentity(file) {
 
 function isClientCompressibleImage(file) {
   const mime = String(file?.type || "").toLowerCase();
-  return mime === "image/jpeg" || mime === "image/jpg" || mime === "image/webp";
+  return mime === "image/jpeg" || mime === "image/jpg";
 }
 
 function buildCompressedFileName(originalName, mimeType) {
   const source = String(originalName || "image.jpg");
   const stripped = source.replace(/\.[^.]+$/, "");
-  const extension = mimeType === "image/webp" ? ".webp" : ".jpg";
+  const extension = /\.jpeg$/i.test(source) ? ".jpeg" : ".jpg";
   return `${stripped}${extension}`;
 }
 
@@ -375,7 +375,7 @@ async function compressImageForUpload(file, maxBytes) {
 
     context.drawImage(loaded.image, 0, 0, targetWidth, targetHeight);
 
-    const outputMime = String(file.type || "").toLowerCase() === "image/webp" ? "image/webp" : "image/jpeg";
+    const outputMime = "image/jpeg";
     let bestBlob = null;
 
     for (const quality of CLIENT_IMAGE_QUALITY_STEPS) {
