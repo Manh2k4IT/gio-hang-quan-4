@@ -181,6 +181,15 @@ function parseVariantPriceInput(value) {
   return Math.round(amount);
 }
 
+function showMissingFieldsToast(fields) {
+  const missingFields = Array.isArray(fields)
+    ? fields.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
+  if (!missingFields.length) return false;
+  showToast(`Chưa điền đủ: ${missingFields.join(", ")}`);
+  return true;
+}
+
 function formatVariantLength(length) {
   const safe = Number(length);
   if (!Number.isFinite(safe) || safe <= 0) return "";
@@ -1441,13 +1450,10 @@ async function saveProduct() {
   const productId = document.getElementById("productId").value;
   const saveBtn = document.querySelector(".btn-save");
 
-  if (!name) {
-    showToast("Vui lòng nhập tên sản phẩm");
-    return;
-  }
-
-  if (!category) {
-    showToast("Vui lòng chọn danh mục");
+  const missingGeneralFields = [];
+  if (!name) missingGeneralFields.push("Tên sản phẩm");
+  if (!category) missingGeneralFields.push("Danh mục");
+  if (showMissingFieldsToast(missingGeneralFields)) {
     return;
   }
 
@@ -1463,23 +1469,43 @@ async function saveProduct() {
     const normalizedRows = variantRowsData
       .map((row, index) => ({
         ...row,
+        rawName: String(row.name || "").trim(),
         name: String(row.name || "").trim() || `Màu ${index + 1}`,
         cutLength: parseVariantLengthInput(row.cutLength),
         variantPrice: parseVariantPriceInput(row.variantPrice),
         variantOldPrice: parseVariantPriceInput(row.variantOldPrice),
         colorStock: Number.isFinite(Number(row.colorStock))
           ? Math.max(0, Math.round(Number(row.colorStock) * 100) / 100)
-          : null
+          : null,
+        hasAnyInput: Boolean(
+          row.file ||
+          row.existingUrl ||
+          String(row.name || "").trim() ||
+          String(row.cutLength ?? "").trim() ||
+          String(row.variantPrice ?? "").trim() ||
+          String(row.variantOldPrice ?? "").trim() ||
+          String(row.colorStock ?? "").trim()
+        )
       }))
-      .filter((row) => {
-        const hasImage = Boolean(row.file || row.existingUrl);
-        const hasName = Boolean(String(row.name || "").trim());
-        const hasLength = Number.isFinite(Number(row.cutLength));
-        const hasPrice = Number.isFinite(Number(row.variantPrice));
-        const hasOldPrice = Number.isFinite(Number(row.variantOldPrice));
-        const hasStock = Number.isFinite(Number(row.colorStock));
-        return hasImage || hasName || hasLength || hasPrice || hasOldPrice || hasStock;
-      });
+      .filter((row, index) => row.hasAnyInput || index === 0);
+
+    const missingVariantRows = [];
+    normalizedRows.forEach((row, index) => {
+      const missingFields = [];
+      if (!Boolean(row.file || row.existingUrl)) missingFields.push("Ảnh màu");
+      if (!row.rawName) missingFields.push("Tên màu");
+      if (!Number.isFinite(Number(row.cutLength))) missingFields.push("Chiều dài mỗi khúc (m)");
+      if (!Number.isFinite(Number(row.variantPrice))) missingFields.push("Giá khổ này (đ)");
+      if (!Number.isFinite(Number(row.colorStock))) missingFields.push("Số mét tồn");
+      if (missingFields.length) {
+        missingVariantRows.push(`Dòng màu ${index + 1}: ${missingFields.join(", ")}`);
+      }
+    });
+
+    if (missingVariantRows.length) {
+      showToast(`Chưa điền đủ: ${missingVariantRows[0]}`);
+      return;
+    }
 
     const uploadedVariantImages = await Promise.all(
       normalizedRows.map((row) => (row.file ? uploadImage(row.file) : Promise.resolve("")))
@@ -1544,7 +1570,7 @@ async function saveProduct() {
 
     const basePriceFromFirstVariant = parseVariantPriceInput(variantPrices[0]);
     if (!Number.isFinite(basePriceFromFirstVariant) || basePriceFromFirstVariant < 0) {
-      showToast("Vui lòng nhập giá cho dòng màu đầu tiên");
+      showMissingFieldsToast(["Giá khổ này của dòng màu 1"]);
       return;
     }
 
@@ -1574,15 +1600,38 @@ async function saveProduct() {
 
     const finalImage = images[0] || "";
 
-    const res = await fetch(API + (isEditing ? `/product/${productId}` : "/product/add"), {
-      method: isEditing ? "PUT" : "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, sku, category, price: Math.round(basePriceFromFirstVariant), oldPrice: variantOldPrices[0] ?? null, stock: stockValueForSave, image: finalImage, images, variantNames, variantPrices, variantOldPrices, variantCutLengths, sizes, variantSizes, variantColorStocks })
-    });
-    const data = await res.json();
+    const saveController = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const saveTimeoutId = saveController
+      ? setTimeout(() => saveController.abort(), 30000)
+      : null;
 
-    if (!res.ok && data.error) {
-      showToast(data.error);
+    let res;
+    try {
+      res = await fetch(API + (isEditing ? `/product/${productId}` : "/product/add"), {
+        method: isEditing ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, sku, category, price: Math.round(basePriceFromFirstVariant), oldPrice: variantOldPrices[0] ?? null, stock: stockValueForSave, image: finalImage, images, variantNames, variantPrices, variantOldPrices, variantCutLengths, sizes, variantSizes, variantColorStocks }),
+        signal: saveController ? saveController.signal : undefined
+      });
+    } catch (error) {
+      if (saveController && error?.name === "AbortError") {
+        throw new Error("Lưu sản phẩm quá lâu, vui lòng thử lại");
+      }
+      throw error;
+    } finally {
+      if (saveTimeoutId) clearTimeout(saveTimeoutId);
+    }
+
+    const raw = await res.text();
+    let data = {};
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch (parseError) {
+      data = { error: raw || "Phản hồi lưu sản phẩm không hợp lệ" };
+    }
+
+    if (!res.ok) {
+      showToast(data.error || "Không thể lưu sản phẩm");
       return;
     }
 
