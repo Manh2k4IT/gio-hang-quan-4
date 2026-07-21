@@ -28,9 +28,11 @@ const uploadMaxFileSizeMb = Math.max(1, Number(process.env.UPLOAD_MAX_FILE_SIZE_
 const uploadMaxFileSizeBytes = uploadMaxFileSizeMb * 1024 * 1024;
 const shopPublicUrl = String(process.env.SHOP_PUBLIC_URL || "").trim();
 const imageOptimizeEnabled = String(process.env.IMAGE_OPTIMIZE_ENABLED || "true").toLowerCase() !== "false";
+const startupImageMaintenanceEnabled = String(process.env.STARTUP_IMAGE_MAINTENANCE_ENABLED || "false").toLowerCase() === "true";
 const imageMaxWidthPx = Math.max(640, Number(process.env.IMAGE_MAX_WIDTH_PX) || 1600);
 const imageQuality = Math.min(95, Math.max(50, Number(process.env.IMAGE_QUALITY) || 82));
 const imageOptimizeMinBytes = Math.max(50 * 1024, Number(process.env.IMAGE_OPTIMIZE_MIN_BYTES) || (300 * 1024));
+const sharpMaxRssMb = Math.max(128, Number(process.env.SHARP_MAX_RSS_MB) || 420);
 const uploadsCacheMaxAgeSec = Math.max(60, Number(process.env.UPLOADS_CACHE_MAX_AGE_SEC) || (30 * 24 * 60 * 60));
 const maxInflightRequests = Math.max(50, Number(process.env.MAX_INFLIGHT_REQUESTS) || 800);
 const cartSessionCookieName = process.env.CART_SESSION_COOKIE || "live_shop_sid";
@@ -410,10 +412,18 @@ function resolveUploadAbsolutePathFromUrl(uploadUrlPathname) {
     };
 }
 
+function canRunSharpWork() {
+    if (!sharp) return false;
+
+    const rssMb = (process.memoryUsage().rss / (1024 * 1024));
+    if (!Number.isFinite(rssMb)) return true;
+    return rssMb < sharpMaxRssMb;
+}
+
 async function convertReferencedUploadUrlToWebp(uploadUrl, convertedPathCache) {
     const originalUrl = String(uploadUrl || "").trim();
     if (!originalUrl.startsWith("/uploads/")) return originalUrl;
-    if (!sharp) return originalUrl;
+    if (!canRunSharpWork()) return originalUrl;
 
     const { pathname, suffix } = splitUploadUrlSuffix(originalUrl);
     const extension = path.extname(pathname).toLowerCase();
@@ -464,7 +474,7 @@ async function convertReferencedUploadUrlToWebp(uploadUrl, convertedPathCache) {
 }
 
 async function optimizeImageFile(filePath) {
-    if (!imageOptimizeEnabled || !sharp) return { optimized: false, reason: "disabled" };
+    if (!imageOptimizeEnabled || !canRunSharpWork()) return { optimized: false, reason: "disabled" };
 
     const extension = path.extname(String(filePath || "")).toLowerCase();
     if (!OPTIMIZABLE_IMAGE_EXTENSIONS.has(extension)) return { optimized: false, reason: "unsupported" };
@@ -507,7 +517,7 @@ async function optimizeImageFile(filePath) {
 }
 
 async function optimizeExistingUploadsInBackground() {
-    if (!imageOptimizeEnabled || !sharp) return;
+    if (!imageOptimizeEnabled || !canRunSharpWork()) return;
 
     let optimizedCount = 0;
     let totalSavedBytes = 0;
@@ -2118,7 +2128,7 @@ persistStateImmediate().catch(err => {
 });
 
 async function migrateLegacyUploadsToWebpIfNeeded() {
-    if (!sharp) return;
+    if (!canRunSharpWork()) return;
 
     let changed = false;
     let migratedRefs = 0;
@@ -3309,7 +3319,7 @@ app.post("/upload",
         let responseFilePath = uploadedFilePath;
         let responseFileName = req.file.filename;
 
-        if (sharp) {
+        if (canRunSharpWork()) {
             try {
                 const parsed = path.parse(req.file.filename);
                 const webpFileName = `${parsed.name}.webp`;
@@ -3339,7 +3349,7 @@ app.post("/upload",
 
         });
 
-        if (path.extname(responseFilePath).toLowerCase() !== ".webp") {
+        if (canRunSharpWork() && path.extname(responseFilePath).toLowerCase() !== ".webp") {
             // Do not block client save/update while optimizing large images.
             setImmediate(async () => {
                 try {
@@ -3854,6 +3864,11 @@ process.on("uncaughtException", (error) => {
 
 startServer(currentPort);
 setImmediate(() => {
+    if (!startupImageMaintenanceEnabled) {
+        console.log("Bỏ qua tác vụ ảnh nền lúc startup (STARTUP_IMAGE_MAINTENANCE_ENABLED=false).");
+        return;
+    }
+
     migrateLegacyUploadsToWebpIfNeeded().catch((error) => {
         console.warn("Chuyển ảnh cũ sang webp thất bại:", error.message);
     });
