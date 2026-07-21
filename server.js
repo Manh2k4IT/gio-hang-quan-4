@@ -3360,17 +3360,6 @@ app.post("/upload",
 
         });
 
-        if (canRunSharpWork() && path.extname(responseFilePath).toLowerCase() !== ".webp") {
-            // Do not block client save/update while optimizing large images.
-            setImmediate(async () => {
-                try {
-                    await optimizeImageFile(responseFilePath);
-                } catch (optimizationError) {
-                    console.warn("Không thể tối ưu ảnh vừa upload:", optimizationError.message);
-                }
-            });
-        }
-
     });
 
 });
