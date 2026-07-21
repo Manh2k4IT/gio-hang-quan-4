@@ -665,6 +665,48 @@ td img{
 
 }
 
+.table-pagination{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding-top:16px;
+    flex-wrap:wrap;
+}
+
+.table-pagination-info{
+    color:#6b7280;
+    font-size:14px;
+}
+
+.table-pagination-actions{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+}
+
+.table-pagination-btn{
+    min-width:40px;
+    height:40px;
+    padding:0 12px;
+    border-radius:10px;
+    background:#eef2f7;
+    color:#111827;
+    font-weight:600;
+}
+
+.table-pagination-btn.active,
+.table-pagination-btn:hover{
+    background:#008060;
+    color:white;
+}
+
+.table-pagination-btn:disabled{
+    opacity:.45;
+    cursor:not-allowed;
+}
+
 .product-link-btn{
 
     background:linear-gradient(135deg, #0ea5a4, #0f766e);

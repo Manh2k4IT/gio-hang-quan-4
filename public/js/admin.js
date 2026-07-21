@@ -35,6 +35,13 @@ let shopPublicUrl = DEFAULT_PUBLIC_SHOP_URL;
 let uploadMaxFileSizeMb = DEFAULT_UPLOAD_MAX_FILE_SIZE_MB;
 let productInsightsMode = "fast";
 let productCategories = [...FIXED_PRODUCT_CATEGORIES];
+const PRODUCT_PAGE_SIZE = 20;
+const ORDER_PAGE_SIZE = 20;
+const MAX_PAGE_BUTTONS = 7;
+const paginationState = {
+  products: 1,
+  orders: 1
+};
 
 function normalizeCategoryLabel(value) {
   const next = String(value || "").trim().replace(/\s+/g, " ");
@@ -305,6 +312,66 @@ function composeVariantName(row, index) {
 
 function getFileIdentity(file) {
   return `${file.name}__${file.size}__${file.lastModified}`;
+}
+
+function clampPage(page, totalPages) {
+  const nextPage = Math.max(1, Math.floor(Number(page) || 1));
+  return Math.min(nextPage, Math.max(1, Math.floor(Number(totalPages) || 1)));
+}
+
+function buildPageWindow(currentPage, totalPages) {
+  const pageCount = Math.max(1, Math.floor(Number(totalPages) || 1));
+  const current = clampPage(currentPage, pageCount);
+  const windowSize = Math.min(MAX_PAGE_BUTTONS, pageCount);
+  const half = Math.floor(windowSize / 2);
+  let start = Math.max(1, current - half);
+  let end = start + windowSize - 1;
+
+  if (end > pageCount) {
+    end = pageCount;
+    start = Math.max(1, end - windowSize + 1);
+  }
+
+  const pages = [];
+  for (let index = start; index <= end; index += 1) {
+    pages.push(index);
+  }
+
+  return pages;
+}
+
+function setPaginationPage(kind, page) {
+  paginationState[kind] = Math.max(1, Math.floor(Number(page) || 1));
+}
+
+function renderPagination(containerId, kind, totalItems, pageSize, onPageChange) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const totalPages = Math.max(1, Math.ceil(Math.max(0, Number(totalItems) || 0) / Math.max(1, Number(pageSize) || 1)));
+  const currentPage = clampPage(paginationState[kind] || 1, totalPages);
+  paginationState[kind] = currentPage;
+
+  const pages = buildPageWindow(currentPage, totalPages);
+  const hasPrev = currentPage > 1;
+  const hasNext = currentPage < totalPages;
+
+  container.innerHTML = `
+    <div class="table-pagination-info">Trang ${currentPage}/${totalPages} · ${Number(totalItems) || 0} mục</div>
+    <div class="table-pagination-actions">
+      <button type="button" class="table-pagination-btn" ${hasPrev ? "" : "disabled"} data-page="${currentPage - 1}">‹</button>
+      ${pages.map((page) => `<button type="button" class="table-pagination-btn ${page === currentPage ? "active" : ""}" data-page="${page}">${page}</button>`).join("")}
+      <button type="button" class="table-pagination-btn" ${hasNext ? "" : "disabled"} data-page="${currentPage + 1}">›</button>
+    </div>
+  `;
+
+  container.querySelectorAll("[data-page]").forEach((button) => {
+    if (button.dataset.bound === "true") return;
+    button.dataset.bound = "true";
+    button.addEventListener("click", () => {
+      onPageChange(Number(button.dataset.page) || 1);
+    });
+  });
 }
 
 function isClientCompressibleImage(file) {
@@ -1519,8 +1586,14 @@ async function load() {
       return haystack.includes(search);
     });
 
+    const totalItems = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / PRODUCT_PAGE_SIZE));
+    const currentPage = clampPage(paginationState.products, totalPages);
+    paginationState.products = currentPage;
+    const pageItems = filtered.slice((currentPage - 1) * PRODUCT_PAGE_SIZE, currentPage * PRODUCT_PAGE_SIZE);
+
     let html = "";
-    filtered.forEach((p) => {
+    pageItems.forEach((p) => {
       const basePrice = getProductBasePriceForDisplay(p);
       const status = p.stock <= 0 ? "Hết hàng" : p.stock <= 3 ? "Sắp hết" : "Còn hàng";
       const categoryLabel = p.category || "Khác";
@@ -1566,6 +1639,10 @@ async function load() {
     });
 
     if (list) list.innerHTML = html || '<tr><td colspan="8">Không có sản phẩm</td></tr>';
+    renderPagination("product-pagination", "products", totalItems, PRODUCT_PAGE_SIZE, (page) => {
+      setPaginationPage("products", page);
+      load();
+    });
     setupProductDragAndDrop();
 
     const totalProduct = document.getElementById("totalProduct");
@@ -1877,8 +1954,14 @@ async function loadOrders() {
       return haystack.includes(search);
     });
 
+    const totalItems = filteredOrders.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / ORDER_PAGE_SIZE));
+    const currentPage = clampPage(paginationState.orders, totalPages);
+    paginationState.orders = currentPage;
+    const pageOrders = filteredOrders.slice((currentPage - 1) * ORDER_PAGE_SIZE, currentPage * ORDER_PAGE_SIZE);
+
     if (list) {
-      list.innerHTML = filteredOrders.map((order) => {
+      list.innerHTML = pageOrders.map((order) => {
         const statusText = {
           pending: "Chờ xử lý",
           confirmed: "Đã xác nhận",
@@ -1932,6 +2015,11 @@ async function loadOrders() {
         `;
       }).join("");
     }
+
+    renderPagination("order-pagination", "orders", totalItems, ORDER_PAGE_SIZE, (page) => {
+      setPaginationPage("orders", page);
+      loadOrders();
+    });
 
     if (totalOrders) totalOrders.textContent = data.length;
     if (pendingOrders) pendingOrders.textContent = data.filter((order) => order.status === "pending").length;
