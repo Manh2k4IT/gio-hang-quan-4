@@ -1704,7 +1704,8 @@ async function saveProduct() {
 async function loadOrders() {
   try {
     const res = await fetch(API + "/orders");
-    const data = await res.json();
+    const rawData = await res.json();
+    const data = Array.isArray(rawData) ? rawData : [];
     state.orders = data;
     populateCustomerDataYearOptions(data);
     populateProductInsightsDateOptions(data);
@@ -1735,12 +1736,13 @@ async function loadOrders() {
         const grandTotal = getOrderGrandTotal(order);
         const totalMeters = getOrderTotalMeters(order);
 
-        const itemSummary = (order.items || []).map((item) => {
+        const items = Array.isArray(order.items) ? order.items : [];
+        const itemSummary = items.map((item) => {
           const variantPart = item.variantName ? ` (${item.variantName}${item.size ? ` - ${item.size}` : ""})` : (item.size ? ` (${item.size})` : "");
           return `<span class="order-item-pill">${item.name}${variantPart} x${item.qty}</span>`;
         }).join("");
 
-        const skuSummary = [...new Set((order.items || [])
+        const skuSummary = [...new Set(items
           .map((item) => String(item.sku || "").trim())
           .filter(Boolean))].join(" • ") || "Chưa có SKU";
 
