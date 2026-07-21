@@ -28,11 +28,14 @@ const uploadMaxFileSizeMb = Math.max(1, Number(process.env.UPLOAD_MAX_FILE_SIZE_
 const uploadMaxFileSizeBytes = uploadMaxFileSizeMb * 1024 * 1024;
 const shopPublicUrl = String(process.env.SHOP_PUBLIC_URL || "").trim();
 const imageOptimizeEnabled = String(process.env.IMAGE_OPTIMIZE_ENABLED || "true").toLowerCase() !== "false";
+const imageConvertOnUploadEnabled = String(process.env.IMAGE_CONVERT_ON_UPLOAD_ENABLED || "true").toLowerCase() !== "false";
 const startupImageMaintenanceEnabled = String(process.env.STARTUP_IMAGE_MAINTENANCE_ENABLED || "false").toLowerCase() === "true";
 const imageMaxWidthPx = Math.max(640, Number(process.env.IMAGE_MAX_WIDTH_PX) || 1600);
 const imageQuality = Math.min(95, Math.max(50, Number(process.env.IMAGE_QUALITY) || 82));
 const imageOptimizeMinBytes = Math.max(50 * 1024, Number(process.env.IMAGE_OPTIMIZE_MIN_BYTES) || (300 * 1024));
 const sharpMaxRssMb = Math.max(128, Number(process.env.SHARP_MAX_RSS_MB) || 420);
+const sharpConcurrency = Math.max(1, Math.min(4, Number(process.env.SHARP_CONCURRENCY) || 1));
+const sharpDisableCache = String(process.env.SHARP_DISABLE_CACHE || "true").toLowerCase() !== "false";
 const uploadsCacheMaxAgeSec = Math.max(60, Number(process.env.UPLOADS_CACHE_MAX_AGE_SEC) || (30 * 24 * 60 * 60));
 const maxInflightRequests = Math.max(50, Number(process.env.MAX_INFLIGHT_REQUESTS) || 800);
 const cartSessionCookieName = process.env.CART_SESSION_COOKIE || "live_shop_sid";
@@ -41,6 +44,14 @@ const diagnosticsRecentLimit = Math.max(20, Number(process.env.DIAGNOSTICS_RECEN
 let inflightRequests = 0;
 const recentWriteEvents = [];
 const recentServerErrors = [];
+
+if (sharp) {
+    // Keep sharp memory footprint stable on small instances.
+    sharp.concurrency(sharpConcurrency);
+    if (sharpDisableCache) {
+        sharp.cache(false);
+    }
+}
 
 app.set("trust proxy", 1);
 
@@ -3319,7 +3330,7 @@ app.post("/upload",
         let responseFilePath = uploadedFilePath;
         let responseFileName = req.file.filename;
 
-        if (canRunSharpWork()) {
+        if (imageConvertOnUploadEnabled && canRunSharpWork()) {
             try {
                 const parsed = path.parse(req.file.filename);
                 const webpFileName = `${parsed.name}.webp`;

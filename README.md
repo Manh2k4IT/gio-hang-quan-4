@@ -58,8 +58,11 @@ Co the doi bang bien moi truong khi deploy.
 - `CHECKOUT_RATE_WINDOW_MS`, `CHECKOUT_RATE_MAX`: gioi han tan suat checkout
 - `UPLOAD_MAX_FILE_SIZE_MB`: gioi han kich thuoc file upload
 - `IMAGE_OPTIMIZE_ENABLED`: bat/tat toi uu anh khi upload
+- `IMAGE_CONVERT_ON_UPLOAD_ENABLED`: bat/tat chuyen anh upload sang webp ngay khi tai len
 - `STARTUP_IMAGE_MAINTENANCE_ENABLED`: bat/tat quet toi uu/chuyen anh hang loat luc khoi dong (khuyen nghi `false` tren Render 512MB)
 - `SHARP_MAX_RSS_MB`: nguong RAM (RSS, MB) de tam bo qua xu ly anh neu may chu gan day RAM
+- `SHARP_CONCURRENCY`: so luong tac vu sharp chay song song (khuyen nghi `1` tren goi RAM nho)
+- `SHARP_DISABLE_CACHE`: bat/tat cache noi bo cua sharp (khuyen nghi `true` de giam RAM)
 - `KEEP_ALIVE_TIMEOUT_MS`, `HEADERS_TIMEOUT_MS`, `REQUEST_TIMEOUT_MS`: timeout HTTP server
 - `SOCKET_PING_INTERVAL_MS`, `SOCKET_PING_TIMEOUT_MS`, `SOCKET_MAX_BUFFER_BYTES`: timeout/bo nho Socket.IO
 - `CART_SESSION_COOKIE`: ten cookie de tach gio hang theo tung nguoi dung

@@ -13,6 +13,16 @@ services:
         value: /var/data/gio-hang-quan-4/data
       - key: UPLOAD_DIR
         value: /var/data/gio-hang-quan-4/uploads
+      - key: STARTUP_IMAGE_MAINTENANCE_ENABLED
+        value: "false"
+      - key: SHARP_MAX_RSS_MB
+        value: "360"
+      - key: SHARP_CONCURRENCY
+        value: "1"
+      - key: SHARP_DISABLE_CACHE
+        value: "true"
+      - key: IMAGE_CONVERT_ON_UPLOAD_ENABLED
+        value: "false"
     disk:
       name: gio-hang-quan-4-data
       mountPath: /var/data/gio-hang-quan-4
