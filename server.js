@@ -2611,6 +2611,16 @@ app.post("/product/add", (req, res) => {
 
     }
 
+    if (!skuValue) {
+
+        return res.status(400).json({
+
+            error: "Thiếu mã SKU"
+
+        });
+
+    }
+
     const categoryValue = normalizeTextValue(category, "Khác");
     const imageValue = normalizeTextValue(image, "");
     const imageList = normalizeImageList(images);
@@ -2755,7 +2765,13 @@ app.put("/product/:id", (req, res) => {
     } = body;
 
     if (name !== undefined) product.name = normalizeTextValue(name, product.name || "");
-    if (body.sku !== undefined) product.sku = normalizeTextValue(body.sku, product.sku || "");
+    if (body.sku !== undefined) {
+        const nextSkuValue = normalizeTextValue(body.sku, "");
+        if (!nextSkuValue) {
+            return res.status(400).json({ error: "Thiếu mã SKU" });
+        }
+        product.sku = nextSkuValue;
+    }
 
     if (price !== undefined) product.price = normalizeNumberValue(price, product.price || 0);
 

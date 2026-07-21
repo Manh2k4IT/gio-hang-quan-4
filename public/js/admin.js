@@ -1501,6 +1501,7 @@ async function saveProduct() {
 
   const missingGeneralFields = [];
   if (!name) missingGeneralFields.push("Tên sản phẩm");
+  if (!sku) missingGeneralFields.push("Mã SKU");
   if (!category) missingGeneralFields.push("Danh mục");
   if (showMissingFieldsToast(missingGeneralFields)) {
     return;
