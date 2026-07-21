@@ -42,6 +42,19 @@ function getCategoryOptions() {
   return [...productCategories];
 }
 
+function getSelectableCategoryOptions(categories = getCategoryOptions()) {
+  const { grouped, remaining } = buildCategoryGrouping(categories);
+  return [
+    ...grouped.flatMap((group) => group.children),
+    ...remaining
+  ];
+}
+
+function getDefaultCategoryValue(categories = getCategoryOptions()) {
+  const selectable = getSelectableCategoryOptions(categories);
+  return selectable[0] || categories[0] || "Khác";
+}
+
 function buildCategoryGrouping(categories) {
   const normalized = categories.map((item) => normalizeCategoryLabel(item)).filter(Boolean);
   const used = new Set();
@@ -91,8 +104,9 @@ function renderCategorySelectOptions() {
 
   select.innerHTML = `${groupedHtml}${remainingHtml}`;
 
-  const fallback = options[0] || "Khác";
-  const hasSelected = options.some((item) => normalizeCategoryKey(item) === normalizeCategoryKey(selected));
+  const selectableOptions = getSelectableCategoryOptions(options);
+  const fallback = getDefaultCategoryValue(options);
+  const hasSelected = selectableOptions.some((item) => normalizeCategoryKey(item) === normalizeCategoryKey(selected));
   select.value = hasSelected ? selected : fallback;
 }
 
@@ -186,8 +200,35 @@ function showMissingFieldsToast(fields) {
     ? fields.map((item) => String(item || "").trim()).filter(Boolean)
     : [];
   if (!missingFields.length) return false;
-  showToast(`Chưa điền đủ: ${missingFields.join(", ")}`);
+  const message = `Chưa điền đủ: ${missingFields.join(", ")}`;
+  if (!setProductFormAlert(message)) {
+    showToast(message);
+  }
   return true;
+}
+
+function setProductFormAlert(message) {
+  const alertEl = document.getElementById("productFormAlert");
+  if (!alertEl) return false;
+
+  const nextMessage = String(message || "").trim();
+  if (!nextMessage) {
+    alertEl.textContent = "";
+    alertEl.classList.remove("show");
+    alertEl.classList.remove("shake");
+    return true;
+  }
+
+  alertEl.textContent = `⚠️ ${nextMessage}`;
+  alertEl.classList.add("show");
+  alertEl.classList.remove("shake");
+  void alertEl.offsetWidth;
+  alertEl.classList.add("shake");
+  return true;
+}
+
+function clearProductFormAlert() {
+  setProductFormAlert("");
 }
 
 function formatVariantLength(length) {
@@ -920,6 +961,7 @@ function resetProductForm() {
   const productId = document.getElementById("productId");
 
   variantRowsData = [];
+  clearProductFormAlert();
 
   if (productId) productId.value = "";
   if (name) name.value = "";
@@ -927,8 +969,9 @@ function resetProductForm() {
   if (stock) stock.value = "";
   const options = getCategoryOptions();
   if (category) {
-    const hasCurrent = options.some((item) => normalizeCategoryKey(item) === normalizeCategoryKey(currentCategory));
-    category.value = hasCurrent ? currentCategory : (options[0] || FIXED_PRODUCT_CATEGORIES[0]);
+    const selectableOptions = getSelectableCategoryOptions(options);
+    const hasCurrent = selectableOptions.some((item) => normalizeCategoryKey(item) === normalizeCategoryKey(currentCategory));
+    category.value = hasCurrent ? currentCategory : getDefaultCategoryValue(options);
   }
   if (imageUrl) imageUrl.value = "";
   if (modalTitle) modalTitle.textContent = "➕ Thêm sản phẩm";
@@ -1174,6 +1217,8 @@ function openModal(product = null) {
     modal.classList.add("show");
   }
 
+  clearProductFormAlert();
+
   if (product) {
     if (productId) productId.value = product.id;
     if (name) name.value = product.name || "";
@@ -1181,8 +1226,9 @@ function openModal(product = null) {
     if (stock) stock.value = product.stock || "";
     if (category) {
       const nextCategory = normalizeCategoryLabel(product.category || "");
-      const hasCategory = getCategoryOptions().some((item) => normalizeCategoryKey(item) === normalizeCategoryKey(nextCategory));
-      category.value = hasCategory ? nextCategory : (getCategoryOptions()[0] || FIXED_PRODUCT_CATEGORIES[0]);
+      const selectableOptions = getSelectableCategoryOptions();
+      const hasCategory = selectableOptions.some((item) => normalizeCategoryKey(item) === normalizeCategoryKey(nextCategory));
+      category.value = hasCategory ? nextCategory : getDefaultCategoryValue();
     }
     if (imageUrl) imageUrl.value = product.image || "";
     variantRowsData = [];
@@ -1244,6 +1290,7 @@ function closeModal() {
     modal.style.display = "none";
     modal.classList.remove("show");
   }
+  clearProductFormAlert();
   resetProductForm();
 }
 
@@ -1450,6 +1497,8 @@ async function saveProduct() {
   const productId = document.getElementById("productId").value;
   const saveBtn = document.querySelector(".btn-save");
 
+  clearProductFormAlert();
+
   const missingGeneralFields = [];
   if (!name) missingGeneralFields.push("Tên sản phẩm");
   if (!category) missingGeneralFields.push("Danh mục");
@@ -1503,7 +1552,7 @@ async function saveProduct() {
     });
 
     if (missingVariantRows.length) {
-      showToast(`Chưa điền đủ: ${missingVariantRows[0]}`);
+      setProductFormAlert(`Chưa điền đủ: ${missingVariantRows[0]}`);
       return;
     }
 
@@ -1631,7 +1680,7 @@ async function saveProduct() {
     }
 
     if (!res.ok) {
-      showToast(data.error || "Không thể lưu sản phẩm");
+      setProductFormAlert(data.error || "Không thể lưu sản phẩm");
       return;
     }
 
