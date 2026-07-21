@@ -5,6 +5,9 @@ const state = { products: [], orders: [] };
 const DEFAULT_SHOP_LOGO = "/uploads/logogusa.jpg";
 const DEFAULT_PUBLIC_SHOP_URL = "";
 const DEFAULT_UPLOAD_MAX_FILE_SIZE_MB = 12;
+const CLIENT_IMAGE_MAX_DIMENSION_PX = 1800;
+const CLIENT_IMAGE_MIN_COMPRESS_BYTES = 250 * 1024;
+const CLIENT_IMAGE_QUALITY_STEPS = [0.9, 0.84, 0.78, 0.72];
 let productSortable = null;
 const FIXED_PRODUCT_CATEGORIES = [
   "LINEN TƯNG",
@@ -302,6 +305,106 @@ function composeVariantName(row, index) {
 
 function getFileIdentity(file) {
   return `${file.name}__${file.size}__${file.lastModified}`;
+}
+
+function isClientCompressibleImage(file) {
+  const mime = String(file?.type || "").toLowerCase();
+  return mime === "image/jpeg" || mime === "image/jpg" || mime === "image/webp";
+}
+
+function buildCompressedFileName(originalName, mimeType) {
+  const source = String(originalName || "image.jpg");
+  const stripped = source.replace(/\.[^.]+$/, "");
+  const extension = mimeType === "image/webp" ? ".webp" : ".jpg";
+  return `${stripped}${extension}`;
+}
+
+function canvasToBlob(canvas, mimeType, quality) {
+  return new Promise((resolve) => {
+    if (!canvas || typeof canvas.toBlob !== "function") {
+      resolve(null);
+      return;
+    }
+
+    canvas.toBlob((blob) => {
+      resolve(blob || null);
+    }, mimeType, quality);
+  });
+}
+
+function loadImageFromFile(file) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => resolve({ image, objectUrl });
+    image.onerror = () => reject(new Error("Không đọc được ảnh để tối ưu"));
+    image.src = objectUrl;
+  });
+}
+
+async function compressImageForUpload(file, maxBytes) {
+  if (!file || !isClientCompressibleImage(file)) return file;
+
+  let loaded;
+  try {
+    loaded = await loadImageFromFile(file);
+  } catch (error) {
+    return file;
+  }
+
+  try {
+    const sourceWidth = Number(loaded.image?.naturalWidth || loaded.image?.width || 0);
+    const sourceHeight = Number(loaded.image?.naturalHeight || loaded.image?.height || 0);
+    if (!sourceWidth || !sourceHeight) return file;
+
+    const scale = Math.min(1, CLIENT_IMAGE_MAX_DIMENSION_PX / Math.max(sourceWidth, sourceHeight));
+    const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
+    const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
+    const resized = targetWidth !== sourceWidth || targetHeight !== sourceHeight;
+
+    if (!resized && Number(file.size || 0) < CLIENT_IMAGE_MIN_COMPRESS_BYTES) {
+      return file;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) return file;
+
+    context.drawImage(loaded.image, 0, 0, targetWidth, targetHeight);
+
+    const outputMime = String(file.type || "").toLowerCase() === "image/webp" ? "image/webp" : "image/jpeg";
+    let bestBlob = null;
+
+    for (const quality of CLIENT_IMAGE_QUALITY_STEPS) {
+      const blob = await canvasToBlob(canvas, outputMime, quality);
+      if (!blob) continue;
+      if (!bestBlob || blob.size < bestBlob.size) {
+        bestBlob = blob;
+      }
+
+      if (blob.size <= maxBytes) {
+        bestBlob = blob;
+        break;
+      }
+    }
+
+    if (!bestBlob) return file;
+
+    const shouldUseCompressed = resized || bestBlob.size < Number(file.size || 0) || Number(file.size || 0) > maxBytes;
+    if (!shouldUseCompressed) return file;
+
+    return new File([bestBlob], buildCompressedFileName(file.name, outputMime), {
+      type: outputMime,
+      lastModified: Date.now()
+    });
+  } finally {
+    if (loaded?.objectUrl) {
+      URL.revokeObjectURL(loaded.objectUrl);
+    }
+  }
 }
 
 function updateVariantFilesHint() {
@@ -1494,13 +1597,15 @@ async function uploadImage(file) {
   }
 
   const maxBytes = Math.max(1, Number(uploadMaxFileSizeMb) || DEFAULT_UPLOAD_MAX_FILE_SIZE_MB) * 1024 * 1024;
-  if (Number(file.size || 0) > maxBytes) {
-    const sizeMb = (Number(file.size || 0) / (1024 * 1024)).toFixed(2);
+  const uploadFile = await compressImageForUpload(file, maxBytes);
+
+  if (Number(uploadFile.size || 0) > maxBytes) {
+    const sizeMb = (Number(uploadFile.size || 0) / (1024 * 1024)).toFixed(2);
     throw new Error(`Ảnh \"${file.name || "không rõ tên"}\" nặng ${sizeMb}MB, vượt giới hạn ${uploadMaxFileSizeMb}MB`);
   }
 
   const formData = new FormData();
-  formData.append("image", file);
+  formData.append("image", uploadFile);
 
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timeoutId = controller
