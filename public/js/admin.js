@@ -2004,10 +2004,10 @@ async function loadOrders() {
             <td>
               <div class="order-actions">
                 <select class="order-status-select ${order.status}" data-current-status="${order.status}" onchange="handleOrderAction(${order.id}, this)">
-                  <option value="pending" ${order.status === "pending" ? "selected" : ""}>⏳ Chờ xử lý</option>
-                  <option value="confirmed" ${order.status === "confirmed" ? "selected" : ""}>✓ Đã liên hệ khách</option>
-                  <option value="done" ${order.status === "done" ? "selected" : ""}>✅ Hoàn tất</option>
-                  <option value="delete">🗑️ Xóa đơn</option>
+                  <option value="pending" ${order.status === "pending" ? "selected" : ""}>Chờ xử lý</option>
+                  <option value="confirmed" ${order.status === "confirmed" ? "selected" : ""}>Đã liên hệ khách</option>
+                  <option value="done" ${order.status === "done" ? "selected" : ""}>Hoàn tất</option>
+                  <option value="delete">Xóa đơn</option>
                 </select>
               </div>
             </td>

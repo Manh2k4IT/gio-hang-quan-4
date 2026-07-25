@@ -1406,12 +1406,12 @@ td img{
     min-height:38px;
     border-radius:10px;
     border:1px solid #d1d5db;
-    padding:8px 30px 8px 10px;
-    font-size:13px;
+    padding:7px 24px 7px 8px;
+    font-size:12px;
     font-weight:700;
     white-space:nowrap;
-    min-width:165px;
-    max-width:175px;
+    min-width:126px;
+    max-width:132px;
     color:#0f172a;
     background:#fff;
     cursor:pointer;
@@ -1435,12 +1435,37 @@ td img{
     color:#047857;
 }
 
+#orders-view .card{
+    overflow-x:auto;
+}
+
+#orders-view table{
+    width:100%;
+    table-layout:auto;
+    min-width:0;
+}
+
+#orders-view th,
+#orders-view td{
+    word-break:normal;
+}
+
+#orders-view th:nth-child(7),
+#orders-view td:nth-child(7){
+    min-width:116px;
+}
+
+#orders-view th:nth-child(8),
+#orders-view td:nth-child(8){
+    min-width:132px;
+}
+
 #orders-view table td{
     vertical-align:top;
 }
 
 .order-customer-cell{
-    min-width:300px;
+    min-width:210px;
 }
 
 .order-customer-top{
@@ -1500,15 +1525,39 @@ td img{
 }
 
 .order-address-cell{
-    min-width:220px;
+    min-width:170px;
 }
 
 .order-total-cell{
-    min-width:210px;
+    min-width:165px;
     border-radius:12px;
     background:#f8fafc;
     border:1px solid #e2e8f0;
-    padding:10px 12px !important;
+    padding:9px 10px !important;
+}
+
+@media(max-width:1400px){
+    #orders-view th:nth-child(3),
+    #orders-view td:nth-child(3),
+    #orders-view th:nth-child(4),
+    #orders-view td:nth-child(4){
+        display:none;
+    }
+}
+
+@media(max-width:1100px){
+    #orders-view th:nth-child(5),
+    #orders-view td:nth-child(5){
+        display:none;
+    }
+
+    .order-customer-cell{
+        min-width:190px;
+    }
+
+    .order-total-cell{
+        min-width:170px;
+    }
 }
 
 .order-money-row{
@@ -1722,8 +1771,12 @@ td img{
     }
 
     .order-status-select{
-        min-width:150px;
-        max-width:160px;
+        min-width:120px;
+        max-width:126px;
+    }
+
+    #orders-view table{
+        min-width:0;
     }
 
     .customer-data-toolbar{
