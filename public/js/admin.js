@@ -1316,7 +1316,7 @@ function exportOrdersExcel() {
     "Thời gian": formatOrderTime(order.createdAt),
     "Trạng thái": {
       pending: "Chờ xử lý",
-      confirmed: "Đã xác nhận",
+      confirmed: "Đã liên hệ khách",
       done: "Hoàn tất"
     }[order.status] || order.status || "",
     "Sản phẩm": (order.items || []).map((item) => {
@@ -1357,7 +1357,7 @@ function exportOrdersPDF() {
     getOrderGrandTotal(order).toLocaleString("vi-VN") + "đ",
     {
       pending: "Chờ xử lý",
-      confirmed: "Đã xác nhận",
+      confirmed: "Đã liên hệ khách",
       done: "Hoàn tất"
     }[order.status] || order.status || "",
     (order.items || []).map((item) => {
@@ -1964,7 +1964,7 @@ async function loadOrders() {
       list.innerHTML = pageOrders.map((order) => {
         const statusText = {
           pending: "Chờ xử lý",
-          confirmed: "Đã xác nhận",
+          confirmed: "Đã liên hệ khách",
           done: "Hoàn tất"
         }[order.status] || order.status;
         const subtotal = getOrderSubtotal(order);
@@ -2005,7 +2005,7 @@ async function loadOrders() {
               <div class="order-actions">
                 <select class="order-status-select ${order.status}" data-current-status="${order.status}" onchange="handleOrderAction(${order.id}, this)">
                   <option value="pending" ${order.status === "pending" ? "selected" : ""}>⏳ Chờ xử lý</option>
-                  <option value="confirmed" ${order.status === "confirmed" ? "selected" : ""}>✓ Đã xác nhận</option>
+                  <option value="confirmed" ${order.status === "confirmed" ? "selected" : ""}>✓ Đã liên hệ khách</option>
                   <option value="done" ${order.status === "done" ? "selected" : ""}>✅ Hoàn tất</option>
                   <option value="delete">🗑️ Xóa đơn</option>
                 </select>
