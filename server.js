@@ -1742,10 +1742,31 @@ function getVariantNameByImage(product, image) {
 
 }
 
+function normalizeVariantNameForMatch(value) {
+
+    return normalizeTextValue(value, "")
+        .toLowerCase()
+        .replace(/\((\d+(?:[\.,]\d+)?)\s*m\)\s*$/i, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+}
+
 function resolveVariantName(product, requestedImage, requestedVariantName, requestedVariantIndex) {
 
     const directName = normalizeTextValue(requestedVariantName, "");
-    if (directName) return directName;
+    if (directName) {
+        const names = normalizeVariantNames(product?.variantNames);
+        const directNameNormalized = normalizeVariantNameForMatch(directName);
+
+        const byName = names.find((item) => {
+            const raw = normalizeTextValue(item, "");
+            return raw.toLowerCase() === directName.toLowerCase()
+                || normalizeVariantNameForMatch(raw) === directNameNormalized;
+        });
+
+        return byName || directName;
+    }
 
     const images = normalizeImageList(product?.images || product?.image);
     const names = normalizeVariantNames(product?.variantNames);
@@ -1773,7 +1794,12 @@ function getVariantIndex(product, image, variantName) {
     const safeName = String(variantName || "").trim();
 
     if (safeName) {
-        const byName = names.findIndex((item) => String(item || "").trim().toLowerCase() === safeName.toLowerCase());
+        const normalizedSafeName = normalizeVariantNameForMatch(safeName);
+        const byName = names.findIndex((item) => {
+            const raw = String(item || "").trim();
+            return raw.toLowerCase() === safeName.toLowerCase()
+                || normalizeVariantNameForMatch(raw) === normalizedSafeName;
+        });
         if (byName >= 0) return byName;
     }
 
