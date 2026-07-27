@@ -3321,15 +3321,20 @@
         return;
       }
 
+      const selectedVariantIndex = getQuickOrderSelectedVariantIndex(product);
+      const selectedVariantImage = getVariantImages(product)[selectedVariantIndex] || product.image || "";
+      const selectedVariantName = getVariantDisplayName(product, selectedVariantIndex, selectedVariantImage);
+
       const customer = document.getElementById("quickCustomerName").value.trim();
       const phone = document.getElementById("quickCustomerPhone").value.trim();
       const address = document.getElementById("quickCustomerAddress").value.trim();
 
       const payload = {
         productId: Number(product.id),
-        variantIndex: getQuickOrderSelectedVariantIndex(product),
-        variantName: getVariantDisplayName(product, getQuickOrderSelectedVariantIndex(product), getVariantImages(product)[getQuickOrderSelectedVariantIndex(product)] || product.image || ""),
-        size: quickOrderState.size || getAvailableSizesByVariant(product, getQuickOrderSelectedVariantIndex(product))[0] || "",
+        variantIndex: selectedVariantIndex,
+        variantImage: selectedVariantImage,
+        variantName: selectedVariantName,
+        size: quickOrderState.size || getAvailableSizesByVariant(product, selectedVariantIndex)[0] || "",
         qty: Math.max(1, Number(quickOrderState.qty || 1)),
         customer,
         phone,
