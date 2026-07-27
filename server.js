@@ -827,6 +827,77 @@ function mergeIntoExistingOrder(targetOrder, payload) {
     return targetOrder;
 }
 
+function repairLegacyQuickCheckoutOrderTotals() {
+    let fixedCount = 0;
+    const fixedOrderIds = [];
+
+    for (const order of (Array.isArray(orders) ? orders : [])) {
+        const items = Array.isArray(order?.items) ? order.items : [];
+        if (!items.length) continue;
+
+        let unresolved = false;
+        let touched = false;
+        let recalculatedSubtotal = 0;
+
+        for (const item of items) {
+            const qty = Math.max(1, Math.floor(Number(item?.qty) || 1));
+            const itemSku = normalizeTextValue(item?.sku, "").toLowerCase();
+            const itemName = normalizeTextValue(item?.name, "").toLowerCase();
+            const itemVariantName = normalizeTextValue(item?.variantName, "");
+
+            const product = products.find((candidate) => {
+                const productSku = normalizeTextValue(candidate?.sku, "").toLowerCase();
+                const productName = normalizeTextValue(candidate?.name, "").toLowerCase();
+
+                if (itemSku && productSku) return itemSku === productSku;
+                return itemName && productName && itemName === productName;
+            });
+
+            if (!product) {
+                unresolved = true;
+                break;
+            }
+
+            const basePrice = Math.max(0, Math.floor(Number(product?.price) || 0));
+            const variantNames = normalizeVariantNames(product?.variantNames);
+            let variantIndex = variantNames.findIndex((name) => normalizeTextValue(name, "").toLowerCase() === itemVariantName.toLowerCase());
+            if (variantIndex < 0) {
+                variantIndex = getVariantIndex(product, "", itemVariantName);
+            }
+            variantIndex = Math.max(0, variantIndex);
+
+            const variantPrice = Math.max(0, Math.floor(Number(getVariantUnitPrice(product, variantIndex)) || 0));
+            const unitPrice = variantPrice > 0 && variantPrice !== basePrice ? variantPrice : basePrice;
+
+            if (unitPrice !== basePrice) {
+                touched = true;
+            }
+
+            recalculatedSubtotal += unitPrice * qty;
+        }
+
+        if (unresolved || !touched) continue;
+
+        const nextSubtotal = Math.max(0, Math.floor(recalculatedSubtotal || 0));
+        const nextShippingFee = getShippingFeeBySubtotal(nextSubtotal);
+        const nextTotal = nextSubtotal + nextShippingFee;
+        const oldSubtotal = Math.max(0, Math.floor(Number(order?.subtotal) || 0));
+        const oldShippingFee = Math.max(0, Math.floor(Number(order?.shippingFee) || 0));
+        const oldTotal = Math.max(0, Math.floor(Number(order?.total) || 0));
+
+        if (oldSubtotal === nextSubtotal && oldShippingFee === nextShippingFee && oldTotal === nextTotal) continue;
+
+        order.subtotal = nextSubtotal;
+        order.shippingFee = nextShippingFee;
+        order.total = nextTotal;
+
+        fixedCount += 1;
+        fixedOrderIds.push(order.id);
+    }
+
+    return { fixedCount, fixedOrderIds };
+}
+
 function cloneData(value) {
 
     return JSON.parse(JSON.stringify(value));
@@ -2133,6 +2204,10 @@ function loadPersistedState() {
 
 loadPersistedState();
 normalizeProductOrder();
+const legacyQuickCheckoutRepair = repairLegacyQuickCheckoutOrderTotals();
+if (legacyQuickCheckoutRepair.fixedCount > 0) {
+    console.log(`Da sua ${legacyQuickCheckoutRepair.fixedCount} don cu bi sai gia bien the: ${legacyQuickCheckoutRepair.fixedOrderIds.join(", ")}`);
+}
 reconcileEntireCart();
 persistStateImmediate().catch(err => {
     console.error("Không thể lưu state ban đầu:", err.message);
