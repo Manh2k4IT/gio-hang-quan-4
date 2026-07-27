@@ -2546,6 +2546,8 @@ app.post("/checkout", (req, res) => {
         const itemVariantIndex = getVariantIndex(product, itemImage, itemVariantName);
         const itemSize = resolveSelectedSizeByVariant(product, itemVariantIndex, item.selectedSize || "");
         const stockInfo = getVariantStockInfo(product, itemVariantIndex, itemSize);
+        const itemUnitPrice = getVariantUnitPrice(product, itemVariantIndex);
+        const itemUnitOldPrice = getVariantUnitOldPrice(product, itemVariantIndex);
 
         if (stockInfo.stock <= 0) {
 
@@ -2561,6 +2563,10 @@ app.post("/checkout", (req, res) => {
 
         validItems.push({
             ...item,
+            price: itemUnitPrice,
+            oldPrice: itemUnitOldPrice,
+            image: itemImage,
+            variantName: itemVariantName,
             qty: safeQty,
             selectedSize: itemSize
         });
