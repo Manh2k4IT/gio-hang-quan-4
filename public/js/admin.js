@@ -1651,7 +1651,10 @@ async function load() {
     const outStock = document.getElementById("outStock");
 
     if (totalProduct) totalProduct.textContent = categoryScopedData.length;
-    if (totalStock) totalStock.textContent = categoryScopedData.reduce((sum, p) => sum + Number(p.stock || 0), 0);
+    if (totalStock) {
+      const totalStockValue = categoryScopedData.reduce((sum, p) => sum + Number(p.stock || 0), 0);
+      totalStock.textContent = Number(totalStockValue.toFixed(2));
+    }
     if (lowStock) lowStock.textContent = categoryScopedData.filter((p) => p.stock > 0 && p.stock <= 3).length;
     if (outStock) outStock.textContent = categoryScopedData.filter((p) => Number(p.stock || 0) <= 0).length;
   } catch (error) {
