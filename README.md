@@ -30,6 +30,22 @@ npm run start:pm2
 
 Server mac dinh chay o `http://localhost:3000`.
 
+## Dang nhap quan tri
+
+Trang `/admin.html` yeu cau dang nhap. Cai dat `ADMIN_EMAIL` va `ADMIN_PASSWORD_HASH` trong `.env` local (duoc git bo qua) hoac Environment tren Render. Khong commit mat khau hay hash that. Khong cau hinh tai khoan thi admin bi khoa, trang khach van hoat dong.
+
+Tao hash bang Node, nhap mat khau tu ban phim (khong dua vao lich su lenh):
+
+```bash
+node -e "const r=require('node:readline').createInterface({input:process.stdin,output:process.stdout});r.question('Password: ',p=>{const c=require('node:crypto'),s=c.randomBytes(16).toString('hex');console.log('scrypt:'+s+':'+c.scryptSync(p,s,64).toString('hex'));r.close()})"
+```
+
+Trinh duyet nho dang nhap 30 ngay qua cookie HttpOnly, SameSite=Strict (Secure tren HTTPS); khong luu mat khau vao localStorage. Phien luu dang hash trong `DATA_DIR/admin-sessions.json`, ton tai qua restart, bi huy khi dang xuat hoac doi tai khoan/hash. Can disk ben vung tren Render de giu phien qua deploy.
+
+API quan tri (san pham, don hang, cai dat ghi, upload, thong ke) cung yeu cau dang nhap. Thao tac ghi yeu cau header `X-Admin-Request: 1` va cung origin neu co Origin header. Gio hang va checkout cua khach khong can dang nhap. Dang nhap bi gioi han 10 lan/15 phut moi IP. Mat khau ngan/de doan khong phu hop production; nen doi mat khau manh truoc khi public.
+
+Kiem tra: `npm run test:auth`.
+
 ## Luu tru ben vung
 
 Danh muc `LINEN TAM GAN THEU` da doi thanh `LINEN TAM GAN`. Server tu chuyen ten cu trong san pham, gio hang, don hang va cai dat khi khoi dong; link danh muc cu van duoc nhan dien.
@@ -94,6 +110,38 @@ Luu y quan trong:
 
 - Hien tai cart dang in-memory theo process. Vi vay neu chay >1 process thi cart co the khong dong bo giua process.
 - Truoc khi scale ngang, nen dua cart/session vao Redis hoac DB dung chung.
+
+## Vai khuc va vai ban theo met
+
+Cot **Ton kho** trong danh sach san pham chi hien so lon, khong nhap/cap nhat truc tiep. De sua ton kho, dung form sua san pham va so met ton theo tung mau.
+
+Trong form them/sua san pham, bat **San pham nay la vai khuc, ban theo khuc co dinh** de ban theo khuc. Nhan **Vai khuc** chi hien trong danh sach quan tri, khong hien tren danh sach san pham trang khach.
+
+- Vai khuc: nhap chieu dai moi khuc cho tung mau, so luong dat la so khuc nguyen. Ton kho luu theo met; mua 2 khuc dai 2.7m tru 5.4m ton kho.
+- Khong bat: ban theo met, cho nhap so met le va tang/giam 0.1m, mac dinh/toi thieu tren giao dien la 1m. Ton kho va so luong don hang giu phan thap phan.
+- Gia cua vai khuc la gia moi khuc; gia vai ban theo met la gia moi met.
+- San pham cu co chieu dai khuc duoc tu nhan dien la vai khuc de giu cach ban truoc day. San pham moi mac dinh ban theo met. Tat che do vai khuc se xoa cau hinh chieu dai khuc; neu bat lai can nhap lai.
+- Don hang giu che do ban va chieu dai tai thoi diem dat de hien thi/xuat so met chinh xac, ke ca sau khi sua san pham.
+
+Kiem tra ca che do vai, thong ke va gioi han mua: `npm run test:fabric`.
+
+## Gioi han mua mot lan
+
+Trong muc **San pham**, danh dau cot **Ap dung gioi han** cho vai khuc ngay trong bang san pham va bam **Bat gioi han**. Vai ban theo met khong chon duoc va khong bi gioi han. Moi lan tich/bo tich tu luu; khi dang bat thi ap dung ngay. Trong khi luu, tam khoa cac lua chon de tranh ghi de. Neu luu that bai, thong bao loi va khoi phuc lua chon da luu truoc do.
+Cot **Trang thai** hien **Dang bat gioi han** cho vai khuc dang duoc ap dung. Nhan cap nhat theo cau hinh da luu; tat gioi han hoac bo chon san pham se an nhan, khong thay doi trang thai ton kho.
+Nut **Bat gioi han** mo va khong bam duoc khi chua chon san pham; sang len sau khi chon it nhat mot san pham va luu thanh cong. Khi dang bat, nut **Tat gioi han** van dung duoc ke ca bo chon het.
+Nut **Chon tat ca** chi chon vai khuc theo danh muc/tu khoa dang loc, ke ca cac trang tiep theo; khi tat ca da chon, nut doi thanh **Bo chon tat ca**, bam lan nua se bo chon trong bo loc. Giu nguyen cac lua chon ngoai bo loc va tu luu.
+Bo chon tat ca khi dang bat giu nguyen dot va lich su, tam khong gioi han san pham nao; chon lai san pham se ap dung lich su cua dot hien tai. Muon reset dot, tat roi bat lai. Khi tai cau hinh that bai, hien loi va can F5 de thu lai.
+
+- Khi bat, moi so dien thoai chi duoc mua **1 khuc cho moi ma vai khuc da chon**, gom tat ca mau/kho cua ma do; khong duoc dat lai, nhung van mua duoc ma khac. Server chan so luong vuot 1 tren ca gio hang va mua nhanh truoc khi tru ton, ke ca gui request truc tiep. Bam **Tat gioi han** tu bo chon tat ca san pham va luu lai; can chon lai truoc khi bat dot moi. Khi dang tat van co the chon va luu san pham de chuan bi dot moi.
+- Khi doi san pham thanh vai ban theo met hoac xoa san pham, san pham do duoc bo khoi danh sach ap dung. Lich su dot van giu nguyen.
+- Chi tinh checkout thanh cong khi tinh nang bat. Don cu truoc khi bat khong tinh. Moi lan tat roi bat lai tao dot moi, khach duoc mua lai.
+- Ap dung ca gio hang va dat nhanh, tat ca mau/size cua cung ID san pham. San pham khong duoc chon khong bi gioi han.
+- So dien thoai Viet Nam 10 so va dang `+84` tuong duong duoc nhan dien cung nhau. Khong xac minh chu so dien thoai bang OTP.
+- Don bi chan tra HTTP 409 voi thong bao, khong tru ton hay sua gio hang/don. Xoa don hay doi trang thai khong xoa lich su gioi han.
+- Them/bo chon san pham trong dot dang bat khong reset lich su. Chon lai san pham da mua van bi chan trong dot do.
+- Cau hinh va lich su ma bam so dien thoai luu trong `DATA_DIR/state.json`; giu qua restart. API cau hinh `GET/PUT /settings/purchase-limit` khong tra lich su so dien thoai.
+- Kiem thu: `npm run test:purchase-limit`.
 
 ## Phan tich luot truy cap
 

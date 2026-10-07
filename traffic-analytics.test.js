@@ -132,6 +132,7 @@ test("ranks at most ten clicked products, aggregates days, and restores snapshot
 });
 
 test("HTTP tracking excludes admin/API/bots/prefetch and persists after restart", { timeout: 30000 }, async (t) => {
+    const { adminTestEnv, createAdminTestFetch } = require("./test-helpers/admin-session");
     const testDir = await fs.mkdtemp(path.join(os.tmpdir(), "gusa-traffic-test-"));
     let child;
     t.after(async () => {
@@ -148,9 +149,15 @@ test("HTTP tracking excludes admin/API/bots/prefetch and persists after restart"
     const port = listener.address().port;
     await new Promise((resolve) => listener.close(resolve));
     const origin = `http://127.0.0.1:${port}`;
+    const fetch = createAdminTestFetch(origin);
     await fs.mkdir(path.join(testDir, "data"));
     await fs.writeFile(path.join(testDir, "data", "state.json"), JSON.stringify({
-        products: [{ id: 1, name: "Legacy category product", sku: "LEGACY", price: 100, stock: 10, category: "LINEN TẰM GÂN THÊU" }],
+        products: [{
+            id: 1, name: "Legacy category product", sku: "LEGACY", price: 100, stock: 100,
+            image: "/uploads/test.jpg", images: ["/uploads/test.jpg"],
+            variantStocks: [100], variantColorStocks: [100], category: "LINEN TẰM GÂN THÊU",
+            isFabricCut: true, variantCutLengths: [1]
+        }],
         orders: [],
         cart: [],
         settings: { productCategories: ["LINEN TẰM GÂN THÊU", "LINEN TẰM GÂN"] }
@@ -159,7 +166,7 @@ test("HTTP tracking excludes admin/API/bots/prefetch and persists after restart"
         child = spawn(process.execPath, ["server.js"], {
             cwd: __dirname,
             env: {
-                ...process.env, PORT: String(port), ALLOW_PORT_FALLBACK: "0",
+                ...process.env, ...adminTestEnv, PORT: String(port), ALLOW_PORT_FALLBACK: "0",
                 DATA_DIR: path.join(testDir, "data"), UPLOAD_DIR: path.join(testDir, "uploads"),
                 STARTUP_IMAGE_MAINTENANCE_ENABLED: "false"
             },
@@ -170,7 +177,10 @@ test("HTTP tracking excludes admin/API/bots/prefetch and persists after restart"
         child.stderr.on("data", (chunk) => { output += chunk; });
         for (let attempt = 0; attempt < 100; attempt += 1) {
             if (child.exitCode !== null) assert.fail(`Test server exited: ${output}`);
-            if (output.includes(`http://localhost:${port}/shop.html`)) return;
+            if (output.includes(`http://localhost:${port}/shop.html`)) {
+                await fetch.login();
+                return;
+            }
             await delay(50);
         }
         assert.fail(`Test server did not start: ${output}`);
@@ -220,6 +230,7 @@ test("HTTP tracking excludes admin/API/bots/prefetch and persists after restart"
     assert.equal(expected.totalViews, 4);
     assert.equal(expected.uniqueVisitors, 3);
     assert.deepEqual(expected.topProductClicks.map((product) => [product.productId, product.clicks]), [[1, 1]]);
+    assert.equal(expected.topProductClicks[0].image, "/uploads/test.jpg");
     await visit("/shop.html?productId=999999");
     await visit("/shop.html?productId=1", { "user-agent": "Googlebot" });
     await visit("/shop.html?productId=1", { "sec-purpose": "prefetch" });
@@ -285,4 +296,71 @@ test("HTTP tracking excludes admin/API/bots/prefetch and persists after restart"
     await exited;
     await start();
     assert.deepEqual(await insights(), expected);
+    const limitUrl = `${origin}/settings/purchase-limit`;
+    let rule = await (await fetch(limitUrl)).json();
+    async function configure(enabled, productIds = [1]) {
+        const response = await fetch(limitUrl, {
+            method: "PUT", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ enabled, productIds, roundId: rule.roundId })
+        });
+        assert.equal(response.status, 200);
+        rule = await response.json();
+        assert.equal(rule.purchases, undefined);
+    }
+    async function quick(phone, qty = 1) {
+        return fetch(`${origin}/checkout/quick`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ customer: "Limit test", phone, address: "Test address", productId: 1, qty })
+        });
+    }
+    const initialQuick = await quick("0901234567");
+    assert.equal(initialQuick.status, 200, await initialQuick.text());
+    await configure(true);
+    const roundId = rule.roundId;
+    assert.equal((await quick("0901234567", 2)).status, 400);
+    assert.equal((await quick("0901234567", 1)).status, 200);
+    const beforeBlocked = await (await fetch(`${origin}/products/all`)).json();
+    const duplicate = await quick("+84 901 234 567");
+    assert.equal(duplicate.status, 409);
+    assert.equal((await duplicate.json()).code, "PURCHASE_LIMIT_REACHED");
+    const added = await fetch(`${origin}/add`, {
+        method: "POST", headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ id: 1 })
+    });
+    assert.equal(added.status, 200);
+    const cartBefore = await (await fetch(`${origin}/cart`, { headers: { cookie } })).json();
+    const cartDuplicate = await fetch(`${origin}/checkout`, {
+        method: "POST", headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ customer: "Limit test", phone: "0901234567", address: "Test address" })
+    });
+    assert.equal(cartDuplicate.status, 409);
+    assert.deepEqual(await (await fetch(`${origin}/cart`, { headers: { cookie } })).json(), cartBefore);
+    assert.deepEqual(await (await fetch(`${origin}/products/all`)).json(), beforeBlocked);
+    assert.equal((await quick("not-a-phone")).status, 400);
+    assert.equal((await quick("0901234568")).status, 200);
+    const cartFirst = await fetch(`${origin}/checkout`, {
+        method: "POST", headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ customer: "Limit test", phone: "0901234569", address: "Test address" })
+    });
+    assert.equal(cartFirst.status, 200);
+    assert.equal((await quick("0901234569")).status, 409);
+    await configure(true);
+    assert.equal(rule.roundId, roundId);
+    assert.equal((await quick("0901234567")).status, 409);
+    await delay(400);
+    const stopped = once(child, "exit");
+    child.kill();
+    await stopped;
+    await start();
+    rule = await (await fetch(limitUrl)).json();
+    assert.equal(rule.roundId, roundId);
+    assert.equal((await quick("0901234567")).status, 409);
+    await configure(false);
+    assert.deepEqual(rule.productIds, []);
+    assert.deepEqual((await (await fetch(limitUrl)).json()).productIds, []);
+    assert.equal((await quick("0901234567")).status, 200);
+    await configure(true);
+    assert.notEqual(rule.roundId, roundId);
+    assert.equal((await quick("0901234567")).status, 200);
+    assert.equal((await quick("0901234567")).status, 409);
 });

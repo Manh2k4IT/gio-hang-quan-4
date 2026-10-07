@@ -8,7 +8,11 @@ const { rateLimit } = require("express-rate-limit");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const envFile = path.join(__dirname, ".env");
+if (fs.existsSync(envFile)) process.loadEnvFile(envFile);
+const { installAdminAuth } = require("./admin-auth");
 const { createTrafficState, restoreTrafficState, recordTrafficVisit, recordProductClick, getTrafficInsights } = require("./traffic-analytics");
+const { PurchaseLimitStateError, createPurchaseLimit, getPurchaseLimitSettings, configurePurchaseLimit, checkPurchaseLimit, recordLimitedPurchase, restorePurchaseLimit } = require("./purchase-limit");
 let sharp = null;
 
 try {
@@ -346,11 +350,15 @@ app.get("/shop.html", (req, res, next) => {
     res.send(html);
 });
 
+installAdminAuth(app);
+
 app.use(express.static("public", {
     setHeaders: (res, filePath) => {
         const normalized = String(filePath || "").replace(/\\/g, "/").toLowerCase();
         if (
             normalized.endsWith("/admin.html")
+            || normalized.endsWith("/admin-login.html")
+            || normalized.endsWith("/js/admin-login.js")
             || normalized.endsWith("/shop.html")
             || normalized.endsWith("/index.html")
             || normalized.endsWith("/js/admin.js")
@@ -771,13 +779,17 @@ function getOrderDayKey(value) {
 }
 
 function mapOrderItemSnapshot(item) {
+    const legacyLength = String(item?.variantName || "").match(/\((\d+(?:[.,]\d+)?)\s*m\)\s*$/i);
+    const cutLengthValue = Number(item?.variantCutLength ?? item?.cutLength ?? (legacyLength ? legacyLength[1].replace(",", ".") : null));
     return {
         name: normalizeTextValue(item?.name, "Sản phẩm"),
-        qty: Math.max(1, Math.floor(Number(item?.qty) || 1)),
+        qty: normalizeCartQuantity(item?.qty, 1),
         sku: normalizeTextValue(item?.sku, ""),
         category: normalizeTextValue(item?.category, ""),
         variantName: normalizeTextValue(item?.variantName, ""),
-        size: normalizeTextValue(item?.selectedSize || item?.size, "")
+        size: normalizeTextValue(item?.selectedSize || item?.size, ""),
+        isFabricCut: normalizeBooleanFlag(item?.isFabricCut, cutLengthValue > 0),
+        variantCutLength: Number.isFinite(cutLengthValue) && cutLengthValue > 0 ? Math.round(cutLengthValue * 100) / 100 : null
     };
 }
 
@@ -786,13 +798,13 @@ function mergeOrderItems(existingItems, incomingItems) {
 
     const addItem = (rawItem) => {
         const item = mapOrderItemSnapshot(rawItem);
-        const key = [item.sku, item.name, item.category, item.variantName, item.size]
+        const key = [item.sku, item.name, item.category, item.variantName, item.size, item.isFabricCut, item.variantCutLength]
             .map((value) => String(value || "").toLowerCase().trim())
             .join("||");
 
         const existed = mergedMap.get(key);
         if (existed) {
-            existed.qty += item.qty;
+            existed.qty = normalizeCartQuantity(existed.qty + item.qty, 0);
             return;
         }
 
@@ -858,7 +870,7 @@ function repairLegacyQuickCheckoutOrderTotals() {
         let recalculatedSubtotal = 0;
 
         for (const item of items) {
-            const qty = Math.max(1, Math.floor(Number(item?.qty) || 1));
+            const qty = normalizeCartQuantity(item?.qty, 1);
             const itemSku = normalizeTextValue(item?.sku, "").toLowerCase();
             const itemName = normalizeTextValue(item?.name, "").toLowerCase();
             const itemVariantName = normalizeTextValue(item?.variantName, "");
@@ -932,6 +944,7 @@ let orders = cloneData(DEFAULT_ORDERS);
 
 let appSettings = cloneData(DEFAULT_SETTINGS);
 let trafficAnalytics = createTrafficState();
+let purchaseLimit = createPurchaseLimit();
 
 let dataRevision = 0;
 let persistTimer = null;
@@ -978,6 +991,11 @@ function normalizeProductOrder() {
         product.oldPrice = normalizeOptionalOldPrice(product.oldPrice, null);
         product.stock = normalizeStockValue(product.stock, 0);
         product.image = normalizeTextValue(product.image, "");
+        const legacyCutLengths = Array.isArray(product.variantCutLengths) ? product.variantCutLengths : [];
+        const legacyNames = Array.isArray(product.variantNames) ? product.variantNames : [];
+        const wasSoldByCut = legacyCutLengths.some((length) => Number(length) > 0)
+            || legacyNames.some((name) => /\(\s*\d+(?:[.,]\d+)?\s*m\s*\)\s*$/i.test(String(name)));
+        product.isFabricCut = normalizeBooleanFlag(product.isFabricCut, wasSoldByCut);
 
         if (!Number.isFinite(Number(product.sortOrder))) {
 
@@ -1034,12 +1052,13 @@ function normalizeProductOrder() {
         }
         const normalizedCutLengths = normalizeVariantCutLengths(product.variantCutLengths, variantRowCount);
         product.variantCutLengths = normalizedCutLengths.map((value, index) => {
+            if (!isProductSoldByCut(product)) return null;
             if (Number.isFinite(Number(value)) && Number(value) > 0) {
                 return Math.round(Number(value) * 100) / 100;
             }
 
             const parsed = extractCutLengthFromVariantName(product.variantNames[index]);
-            return Number.isFinite(Number(parsed)) ? parsed : null;
+            return Number(parsed) > 0 ? parsed : 1;
         });
 
         if (!product.variantColorStocks.some((qty) => Number.isFinite(Number(qty))) && product.variantStocks.some((qty) => Number.isFinite(Number(qty)))) {
@@ -1110,8 +1129,8 @@ function reconcileCartStockForProduct(productId) {
         const normalizedSizeKey = buildSizeKey(normalizedSize);
         const normalizedItemKey = buildCartItemKey(normalizedVariantKey, normalizedSizeKey);
 
-        const stockCap = Math.max(0, Math.floor(Number(getVariantStockInfo(product, normalizedVariantIndex, normalizedSize).stock) || 0));
-        const currentQty = Math.max(0, Math.floor(Number(item.qty) || 0));
+        const stockCap = normalizeQuantityForProduct(product, getVariantStockInfo(product, normalizedVariantIndex, normalizedSize).stock, 0);
+        const currentQty = normalizeQuantityForProduct(product, item.qty, 0);
         const cappedQty = Math.min(currentQty, stockCap);
 
         if (cappedQty <= 0) {
@@ -1150,6 +1169,8 @@ function reconcileCartStockForProduct(productId) {
             sizeKey: normalizedSizeKey,
             itemKey: normalizedItemKey,
             category: getProductCategory(product),
+            isFabricCut: isProductSoldByCut(product),
+            variantCutLength: getVariantUnitCutLength(product, normalizedVariantIndex),
             qty: cappedQty,
             __stockCap: stockCap
         });
@@ -1157,8 +1178,9 @@ function reconcileCartStockForProduct(productId) {
 
     const normalizedItems = [...mergedByItemKey.values()]
         .map((item) => {
-            const maxQty = Math.max(0, Math.floor(Number(item.__stockCap) || 0));
-            const safeQty = Math.max(0, Math.floor(Number(item.qty) || 0));
+            const product = findProductById(item.id);
+            const maxQty = normalizeQuantityForProduct(product, item.__stockCap, 0);
+            const safeQty = normalizeQuantityForProduct(product, item.qty, 0);
             const qty = Math.min(safeQty, maxQty);
             if (qty !== safeQty) changed = true;
 
@@ -1353,6 +1375,35 @@ function normalizeStockValue(value, fallback = 0) {
     const safe = Math.max(0, number);
     return Math.round(safe * 100) / 100;
 
+}
+
+function normalizeCartQuantity(value, fallback = 1) {
+    const number = normalizeNumberValue(value, fallback);
+    const safe = Number.isFinite(number) ? number : fallback;
+    const clamped = Math.max(0, safe);
+    return Math.round(clamped * 100) / 100;
+}
+
+function normalizeBooleanFlag(value, fallback = false) {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "string") {
+        const normalized = value.trim().toLowerCase();
+        if (["true", "1", "yes", "on"].includes(normalized)) return true;
+        if (["false", "0", "no", "off", ""].includes(normalized)) return false;
+    }
+    if (typeof value === "number") return value !== 0;
+    return Boolean(fallback);
+}
+
+function isProductSoldByCut(product) {
+    return normalizeBooleanFlag(product?.isFabricCut, false);
+}
+
+function normalizeQuantityForProduct(product, value, fallback = 1) {
+    const quantity = normalizeCartQuantity(value, fallback);
+    if (quantity <= 0) return 0;
+    if (!isProductSoldByCut(product)) return quantity;
+    return Math.floor(quantity + 1e-9);
 }
 
 function normalizeImageList(value) {
@@ -1651,26 +1702,22 @@ function getVariantStockInfo(product, variantIndex, size) {
     const colorStock = stocks[index];
     const totalStock = normalizeStockValue(product?.stock, 0);
     const cutLength = getVariantUnitCutLength(product, index);
+    const soldByCut = isProductSoldByCut(product) && Number.isFinite(Number(cutLength)) && Number(cutLength) > 0;
 
     if (Number.isFinite(Number(colorStock))) {
         const normalizedColorStock = normalizeStockValue(colorStock, 0);
-        const availableStock = Math.min(normalizedColorStock, totalStock);
-        const availablePieces = cutLength
-            ? Math.floor((availableStock + 1e-9) / cutLength)
-            : Math.floor(availableStock);
+        const availableStock = Math.round(Math.min(normalizedColorStock, totalStock) * 100) / 100;
         return {
-            stock: Math.max(0, availablePieces),
+            stock: Math.max(0, soldByCut ? Math.floor((availableStock + 1e-9) / Number(cutLength)) : availableStock),
             explicit: true,
             key: ""
         };
     }
 
-    const availablePieces = cutLength
-        ? Math.floor((totalStock + 1e-9) / cutLength)
-        : Math.floor(totalStock);
+    const availableStock = Math.round(totalStock * 100) / 100;
 
     return {
-        stock: Math.max(0, availablePieces),
+        stock: Math.max(0, soldByCut ? Math.floor((availableStock + 1e-9) / Number(cutLength)) : availableStock),
         explicit: false,
         key: ""
     };
@@ -1718,14 +1765,14 @@ function getVariantUnitOldPrice(product, variantIndex) {
 
 function decrementVariantStock(product, variantIndex, size, qty) {
 
-    const amountPieces = Math.max(0, Math.floor(Number(qty) || 0));
-    if (!amountPieces) return;
+    const amount = Math.max(0, Math.round(Number(qty) * 100) / 100);
+    if (!amount) return;
 
     const index = Math.max(0, Number(variantIndex) || 0);
     const cutLength = getVariantUnitCutLength(product, index);
-    const amount = cutLength
-        ? Math.round((amountPieces * cutLength) * 100) / 100
-        : amountPieces;
+    const amountToSubtract = isProductSoldByCut(product) && Number.isFinite(Number(cutLength)) && Number(cutLength) > 0
+        ? Math.round(amount * Number(cutLength) * 100) / 100
+        : amount;
     const variantCount = normalizeImageList(product?.images || product?.image).length;
     const stocks = normalizeVariantStocks(
         product?.variantColorStocks !== undefined ? product?.variantColorStocks : product?.variantStocks,
@@ -1734,14 +1781,14 @@ function decrementVariantStock(product, variantIndex, size, qty) {
     const colorStock = stocks[index];
 
     if (Number.isFinite(Number(colorStock))) {
-        stocks[index] = normalizeStockValue(Number(colorStock) - amount, 0);
+        stocks[index] = normalizeStockValue(Number(colorStock) - amountToSubtract, 0);
         product.variantStocks = stocks;
         product.variantColorStocks = [...stocks];
-        product.stock = normalizeStockValue(Number(product.stock) - amount, 0);
+        product.stock = normalizeStockValue(Number(product.stock) - amountToSubtract, 0);
         return;
     }
 
-    product.stock = normalizeStockValue(Number(product.stock) - amount, 0);
+    product.stock = normalizeStockValue(Number(product.stock) - amountToSubtract, 0);
 
 }
 
@@ -1989,7 +2036,7 @@ function getInCartQtyForVariant(productId, sessionId, category, variantKey) {
         const itemVariantKey = String(item?.variantKey || buildVariantKey(item?.variantName, item?.image));
         if (itemVariantKey !== safeVariantKey) return sum;
 
-        return sum + Math.max(0, Math.floor(Number(item?.qty) || 0));
+        return Math.round((sum + normalizeQuantityForProduct(findProductById(item?.id), item?.qty, 0)) * 100) / 100;
     }, 0);
 }
 
@@ -2146,6 +2193,7 @@ async function writeStateFileOnce() {
         cart,
         orders,
         trafficAnalytics,
+        purchaseLimit,
             settings: appSettings,
         dataRevision
     };
@@ -2223,6 +2271,7 @@ function loadPersistedState() {
     try {
         const raw = fs.readFileSync(stateFile, "utf8");
         const parsed = JSON.parse(raw || "{}");
+        purchaseLimit = restorePurchaseLimit(parsed.purchaseLimit);
 
         products = Array.isArray(parsed.products) ? parsed.products : cloneData(DEFAULT_PRODUCTS);
         cart = Array.isArray(parsed.cart)
@@ -2246,6 +2295,7 @@ function loadPersistedState() {
             trafficAnalytics = createTrafficState();
         }
     } catch (error) {
+        if (error instanceof PurchaseLimitStateError) throw error;
         console.error("Không thể đọc dữ liệu state, dùng dữ liệu mặc định:", error.message);
         products = cloneData(DEFAULT_PRODUCTS);
         cart = [];
@@ -2269,6 +2319,7 @@ orders.forEach((order) => {
 });
 appSettings.productCategories = normalizeCategoryList(appSettings.productCategories);
 normalizeProductOrder();
+purchaseLimit.productIds = purchaseLimit.productIds.filter((id) => isProductSoldByCut(findProductById(id)));
 const legacyQuickCheckoutRepair = repairLegacyQuickCheckoutOrderTotals();
 if (legacyQuickCheckoutRepair.fixedCount > 0) {
     console.log(`Da sua ${legacyQuickCheckoutRepair.fixedCount} don cu bi sai gia bien the: ${legacyQuickCheckoutRepair.fixedOrderIds.join(", ")}`);
@@ -2338,6 +2389,7 @@ async function migrateLegacyUploadsToWebpIfNeeded() {
 
 function updateClient() {
 
+    purchaseLimit.productIds = purchaseLimit.productIds.filter((id) => isProductSoldByCut(findProductById(id)));
     dataRevision += 1;
 
     pendingBroadcastRevision = dataRevision;
@@ -2355,7 +2407,7 @@ app.get("/products", (req, res) => {
     const category = getRequestedCategory(req);
     const productsToSend = getVisibleProducts(category);
 
-    res.json(productsToSend);
+    res.json(productsToSend.map((product) => ({ ...product, isPurchaseLimited: isLimitedFabricCut(product) })));
 
 });
 
@@ -2384,7 +2436,7 @@ app.get("/products/all", (req, res) => {
         ? getOrderedProductsByCategory(category)
         : getOrderedProducts();
 
-    res.json(productsToSend);
+    res.json(productsToSend.map((product) => ({ ...product, isPurchaseLimited: isLimitedFabricCut(product) })));
 
 });
 
@@ -2420,6 +2472,10 @@ app.get("/traffic-insights", (req, res) => {
     }
     try {
         const insights = getTrafficInsights(trafficAnalytics, range, new Date(), orders);
+        insights.topProductClicks = insights.topProductClicks.map((product) => ({
+            ...product,
+            image: findProductById(product.productId)?.image || ""
+        }));
         setNoCacheHeaders(res);
         res.json(insights);
     } catch (error) {
@@ -2470,7 +2526,7 @@ app.get("/settings", (req, res) => {
         shopLogo: String(appSettings?.shopLogo || DEFAULT_SETTINGS.shopLogo),
         shopPublicUrl: String(appSettings?.shopPublicUrl || DEFAULT_SETTINGS.shopPublicUrl || ""),
         productCategories: getCategoryOptions(),
-        wholesaleCareStatuses: (appSettings?.wholesaleCareStatuses && typeof appSettings.wholesaleCareStatuses === "object")
+        wholesaleCareStatuses: (req.isAdminAuthenticated && appSettings?.wholesaleCareStatuses && typeof appSettings.wholesaleCareStatuses === "object")
             ? appSettings.wholesaleCareStatuses
             : {},
         uploadMaxFileSizeMb
@@ -2514,6 +2570,72 @@ app.put("/settings/logo", (req, res) => {
     });
 
 });
+
+app.get("/settings/purchase-limit", (req, res) => {
+    setNoCacheHeaders(res);
+    res.json(getPurchaseLimitSettings(purchaseLimit));
+});
+
+app.put("/settings/purchase-limit", (req, res) => {
+    const { enabled, productIds, roundId } = req.body || {};
+    if (roundId !== purchaseLimit.roundId) {
+        return res.status(409).json({ error: "Cấu hình đã thay đổi, vui lòng tải lại trước khi lưu" });
+    }
+    if (!Array.isArray(productIds) || productIds.some((id) => !findProductById(id))) {
+        return res.status(400).json({ error: "Danh sách sản phẩm không hợp lệ hoặc có sản phẩm đã xóa" });
+    }
+    if (productIds.some((id) => !isProductSoldByCut(findProductById(id)))) {
+        return res.status(400).json({ error: "Giới hạn chỉ áp dụng cho sản phẩm vải khúc" });
+    }
+    let next;
+    try {
+        next = configurePurchaseLimit(purchaseLimit, enabled, productIds);
+    } catch (error) {
+        return res.status(400).json({ error: error.message });
+    }
+    purchaseLimit = next;
+    updateClient();
+    res.json(getPurchaseLimitSettings(purchaseLimit));
+});
+
+function isLimitedFabricCut(product) {
+    return isProductSoldByCut(product) && purchaseLimit.enabled && purchaseLimit.productIds.includes(Number(product.id));
+}
+
+function validateLimitedCheckout(req, res, items) {
+    const quantities = new Map();
+    for (const item of items) {
+        const id = Number(item.id);
+        if (!isLimitedFabricCut(findProductById(id))) continue;
+        quantities.set(id, (quantities.get(id) || 0) + Number(item.qty));
+    }
+    const excessive = [...quantities.entries()].filter(([, qty]) => qty > 1);
+    if (excessive.length) {
+        res.status(400).json({
+            error: `Mỗi khách chỉ được mua 1 khúc cho mỗi mã: ${excessive.map(([id]) => findProductById(id).sku || findProductById(id).name).join(", ")}`,
+            code: "PURCHASE_LIMIT_QUANTITY",
+            productIds: excessive.map(([id]) => id)
+        });
+        return null;
+    }
+    let check;
+    try {
+        check = checkPurchaseLimit(purchaseLimit, req.body.phone, [...quantities.keys()]);
+    } catch (error) {
+        res.status(400).json({ error: error.message });
+        return null;
+    }
+    if (check.blocked && check.blocked.length) {
+        const names = check.blocked.map((id) => findProductById(id)?.name || `#${id}`);
+        res.status(409).json({
+            error: `Số điện thoại này đã mua ${names.join(", ")} trong đợt hiện tại. Mỗi mã vải khúc chỉ được mua 1 khúc và không được đặt lại.`,
+            code: "PURCHASE_LIMIT_REACHED",
+            productIds: check.blocked
+        });
+        return null;
+    }
+    return check;
+}
 
 app.put("/settings/wholesale-care", (req, res) => {
 
@@ -2632,6 +2754,8 @@ app.post("/checkout", (req, res) => {
     }
 
     const validItems = [];
+    const limitCheck = validateLimitedCheckout(req, res, checkoutItems);
+    if (!limitCheck) return;
     let skippedItems = 0;
     let adjustedItems = 0;
 
@@ -2740,6 +2864,7 @@ app.post("/checkout", (req, res) => {
     } else {
         cart = cart.filter(item => normalizeSessionId(item.sessionId) !== sessionId);
     }
+    recordLimitedPurchase(purchaseLimit, limitCheck, validItems.map((item) => Number(item.id)));
     updateClient();
 
     res.json({
@@ -2758,7 +2883,6 @@ app.post("/checkout/quick", (req, res) => {
 
     const { customer, phone, address, productId, variantIndex, variantName, variantImage, size, qty } = req.body || {};
     const id = Number(productId);
-    const requestedQty = Math.max(1, Math.floor(Number(qty) || 0));
 
     if (!customer || !phone || !address) {
         return res.status(400).json({ error: "Vui lòng nhập đầy đủ thông tin" });
@@ -2787,6 +2911,13 @@ app.post("/checkout/quick", (req, res) => {
         || getVariantNameByImage(product, effectiveImage)
         || String(variantName || "").trim();
     const effectiveSize = resolveSelectedSizeByVariant(product, effectiveVariantIndex, size || "");
+    if (qty !== undefined && (!Number.isFinite(Number(qty)) || Number(qty) < 1
+        || (isProductSoldByCut(product) && !Number.isInteger(Number(qty))))) {
+        return res.status(400).json({ error: isProductSoldByCut(product) ? "Vải khúc phải đặt số khúc nguyên, tối thiểu 1 khúc" : "Số mét đặt phải hợp lệ, tối thiểu 1m" });
+    }
+    const requestedQty = normalizeQuantityForProduct(product, qty, 1);
+    const limitCheck = validateLimitedCheckout(req, res, [{ id, qty: requestedQty }]);
+    if (!limitCheck) return;
     const stockInfo = getVariantStockInfo(product, effectiveVariantIndex, effectiveSize);
     const unitPrice = getVariantUnitPrice(product, effectiveVariantIndex);
 
@@ -2809,7 +2940,9 @@ app.post("/checkout/quick", (req, res) => {
         sku: product.sku || "",
         category: getProductCategory(product),
         variantName: effectiveVariantName || "",
-        size: effectiveSize || ""
+        size: effectiveSize || "",
+        isFabricCut: isProductSoldByCut(product),
+        variantCutLength: getVariantUnitCutLength(product, effectiveVariantIndex)
     })];
     const mergeTarget = findMergeableOrderByPhoneAndDay(phone, nowIso);
 
@@ -2844,6 +2977,7 @@ app.post("/checkout/quick", (req, res) => {
         responseOrder = newOrder;
     }
 
+    recordLimitedPurchase(purchaseLimit, limitCheck, [id]);
     updateClient();
 
     res.json({
@@ -2892,6 +3026,8 @@ app.post("/product/add", (req, res) => {
 
         variantCutLengths,
 
+        isFabricCut,
+
         category
 
     } = body;
@@ -2900,6 +3036,7 @@ app.post("/product/add", (req, res) => {
     const priceValue = normalizeNumberValue(price, 0);
     const oldPriceValue = normalizeOptionalOldPrice(oldPrice, null);
     const stockValue = normalizeStockValue(stock, 0);
+    const isFabricCutValue = normalizeBooleanFlag(isFabricCut, false);
 
     if (!nameValue) {
 
@@ -2959,12 +3096,15 @@ app.post("/product/add", (req, res) => {
         : oldPriceValue;
     const normalizedVariantCutLengths = normalizeVariantCutLengths(variantCutLengths, variantRowCount)
         .map((value, index) => {
+            if (!isFabricCutValue) {
+                return null;
+            }
             if (Number.isFinite(Number(value)) && Number(value) > 0) {
                 return Math.round(Number(value) * 100) / 100;
             }
 
             const parsed = extractCutLengthFromVariantName(normalizedVariantNames[index]);
-            return Number.isFinite(Number(parsed)) ? parsed : null;
+            return Number(parsed) > 0 ? parsed : 1;
         });
 
     const product = {
@@ -2989,6 +3129,7 @@ app.post("/product/add", (req, res) => {
         variantPrices: normalizedVariantPrices,
         variantOldPrices: normalizedVariantOldPrices,
         variantCutLengths: normalizedVariantCutLengths,
+        isFabricCut: isFabricCutValue,
         sortOrder: getNextSortOrder(),
 
         hidden: false,
@@ -3060,6 +3201,8 @@ app.put("/product/:id", (req, res) => {
 
         variantCutLengths,
 
+        isFabricCut,
+
         category
 
     } = body;
@@ -3079,6 +3222,7 @@ app.put("/product/:id", (req, res) => {
         product.oldPrice = normalizeOptionalOldPrice(oldPrice, null);
     }
     if (stock !== undefined) product.stock = normalizeStockValue(stock, product.stock || 0);
+    if (isFabricCut !== undefined) product.isFabricCut = normalizeBooleanFlag(isFabricCut, product.isFabricCut);
 
     if (image !== undefined) product.image = normalizeTextValue(image, product.image || "");
     if (images !== undefined) {
@@ -3125,7 +3269,7 @@ app.put("/product/:id", (req, res) => {
                 }
 
                 const parsed = extractCutLengthFromVariantName(product.variantNames[index]);
-                return Number.isFinite(Number(parsed)) ? parsed : null;
+                return Number(parsed) > 0 ? parsed : 1;
             });
     }
     if (sizes !== undefined) {
@@ -3160,13 +3304,21 @@ app.put("/product/:id", (req, res) => {
         const variantRowCount = getProductVariantRowCount(product, Array.isArray(variantCutLengths) ? variantCutLengths.length : 1);
         product.variantCutLengths = normalizeVariantCutLengths(variantCutLengths, variantRowCount)
             .map((value, index) => {
+                if (!isProductSoldByCut(product)) {
+                    return null;
+                }
                 if (Number.isFinite(Number(value)) && Number(value) > 0) {
                     return Math.round(Number(value) * 100) / 100;
                 }
 
                 const parsed = extractCutLengthFromVariantName(product.variantNames[index]);
-                return Number.isFinite(Number(parsed)) ? parsed : null;
+                return Number(parsed) > 0 ? parsed : 1;
             });
+    }
+
+    if (!isProductSoldByCut(product)) {
+        const variantRowCount = getProductVariantRowCount(product, 1);
+        product.variantCutLengths = Array.from({ length: variantRowCount }, () => null);
     }
 
     const firstVariantPriceRaw = Array.isArray(product.variantPrices) ? product.variantPrices[0] : null;
@@ -3600,6 +3752,11 @@ app.post("/add", (req, res) => {
 
     }
 
+    if (isLimitedFabricCut(product) && cart.some((item) => Number(item.id) === Number(product.id)
+        && normalizeSessionId(item.sessionId) === sessionId && Number(item.qty) >= 1)) {
+        return res.status(400).json({ error: "Mỗi khách chỉ được mua 1 khúc cho mã này", code: "PURCHASE_LIMIT_QUANTITY" });
+    }
+
     if (requestedCategory && getProductCategory(product) !== requestedCategory) {
 
         return res.status(400).json({
@@ -3705,7 +3862,7 @@ app.post("/add", (req, res) => {
         item.qty++;
         item.price = effectiveUnitPrice;
         item.oldPrice = effectiveUnitOldPrice;
-        item.sku = product.sku || item.sku || "";
+            item.sku = product.sku || item.sku || "";
         item.category = getProductCategory(product);
         item.image = effectiveImage || item.image || product.image;
         item.variantName = effectiveVariantName || item.variantName || "";
@@ -3713,6 +3870,8 @@ app.post("/add", (req, res) => {
         item.selectedSize = effectiveSize;
         item.sizeKey = effectiveSizeKey;
         item.itemKey = effectiveItemKey;
+        item.isFabricCut = isProductSoldByCut(product);
+        item.variantCutLength = getVariantUnitCutLength(product, effectiveVariantIndex);
         item.sessionId = sessionId;
         item.updatedAt = Date.now();
 
@@ -3735,6 +3894,8 @@ app.post("/add", (req, res) => {
             selectedSize: effectiveSize,
             sizeKey: effectiveSizeKey,
             itemKey: effectiveItemKey,
+            isFabricCut: isProductSoldByCut(product),
+            variantCutLength: getVariantUnitCutLength(product, effectiveVariantIndex),
             sessionId,
             updatedAt: Date.now(),
 
@@ -3838,9 +3999,10 @@ app.post("/change", (req, res) => {
 
     }
 
-    const newQty = Number(qty);
+    const rawQty = Number(qty);
+    const newQty = normalizeQuantityForProduct(product, rawQty, 0);
 
-    if (!Number.isFinite(newQty) || newQty < 0) {
+    if (!Number.isFinite(rawQty) || rawQty < 0 || (isProductSoldByCut(product) && !Number.isInteger(rawQty))) {
 
         return res.status(400).json({
 
@@ -3848,6 +4010,12 @@ app.post("/change", (req, res) => {
 
         });
 
+    }
+
+    const otherQty = cart.filter((entry) => entry !== item && Number(entry.id) === Number(id)
+        && normalizeSessionId(entry.sessionId) === sessionId).reduce((sum, entry) => sum + Number(entry.qty), 0);
+    if (newQty > 0 && isLimitedFabricCut(product) && newQty + otherQty > 1) {
+        return res.status(400).json({ error: "Mỗi khách chỉ được mua 1 khúc cho mã này, kể cả khác màu hoặc khổ", code: "PURCHASE_LIMIT_QUANTITY" });
     }
 
     item.sku = product.sku || item.sku || "";
@@ -3903,6 +4071,8 @@ app.post("/change", (req, res) => {
             duplicateItem.selectedSize = nextSize;
             duplicateItem.sizeKey = nextSizeKey;
             duplicateItem.itemKey = nextItemKey;
+            duplicateItem.isFabricCut = isProductSoldByCut(product);
+            duplicateItem.variantCutLength = getVariantUnitCutLength(product, nextVariantIndex);
             duplicateItem.updatedAt = Date.now();
             cart = cart.filter((x) => x !== item);
 
@@ -3919,6 +4089,8 @@ app.post("/change", (req, res) => {
     item.selectedSize = nextSize;
     item.sizeKey = nextSizeKey;
     item.itemKey = nextItemKey;
+    item.isFabricCut = isProductSoldByCut(product);
+    item.variantCutLength = getVariantUnitCutLength(product, nextVariantIndex);
     item.qty = newQty;
     item.updatedAt = Date.now();
 

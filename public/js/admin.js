@@ -2,6 +2,29 @@ const API = window.location.origin && window.location.origin !== "null"
   ? window.location.origin
   : "http://localhost:3000";
 const state = { products: [], orders: [] };
+async function adminFetch(url, options = {}) {
+  const headers = new Headers(options.headers);
+  headers.set("X-Admin-Request", "1");
+  const response = await window.fetch(url, { ...options, headers });
+  if (response.status === 401) {
+    window.location.replace("/admin-login.html");
+    throw new Error("Phiên đăng nhập đã hết hạn");
+  }
+  return response;
+}
+const fetch = adminFetch;
+
+async function logoutAdmin() {
+  try {
+    const response = await adminFetch("/admin/auth/logout", { method: "POST" });
+    if (!response.ok) throw new Error("Không thể đăng xuất");
+    window.location.replace("/admin-login.html");
+  } catch (error) {
+    console.error("Không thể đăng xuất:", error);
+    showToast(error.message);
+  }
+}
+window.logoutAdmin = logoutAdmin;
 const DEFAULT_SHOP_LOGO = "/uploads/logogusa.jpg";
 const DEFAULT_PUBLIC_SHOP_URL = "";
 const DEFAULT_UPLOAD_MAX_FILE_SIZE_MB = 12;
@@ -131,7 +154,8 @@ function renderCategoryNav() {
   const groupedLinks = grouped.map((group) => {
     const childrenLinks = group.children.map((child) => {
       const href = `/admin.html?category=${encodeURIComponent(child)}`;
-      return `<a class="nav-submenu-link" data-category="${child.replace(/"/g, "&quot;")}" href="${href}">${child}</a>`;
+      const label = child.startsWith(`${group.parent} `) ? child.slice(group.parent.length + 1) : child;
+      return `<a class="nav-submenu-link" data-category="${child.replace(/"/g, "&quot;")}" aria-label="${child.replace(/"/g, "&quot;")}" title="${child.replace(/"/g, "&quot;")}" href="${href}">${label}</a>`;
     }).join("");
 
     return `
@@ -147,7 +171,7 @@ function renderCategoryNav() {
     return `<a class="nav-submenu-link" data-category="${category.replace(/"/g, "&quot;")}" href="${href}">${category}</a>`;
   }).join("");
 
-  container.innerHTML = `${groupedLinks}${remainingLinks}<a class="nav-submenu-link" data-category="" href="/admin.html">Tất cả</a>`;
+  container.innerHTML = `<a class="nav-submenu-link nav-submenu-all" data-category="" href="/admin.html">Tất cả sản phẩm</a>${groupedLinks}${remainingLinks}`;
 }
 
 function syncCategoryUi() {
@@ -307,6 +331,7 @@ function splitVariantNameAndLength(value) {
 function composeVariantName(row, index) {
   const name = String(row?.name || "").trim() || `Màu ${index + 1}`;
   const cutLength = parseVariantLengthInput(row?.cutLength);
+  if (!isFabricCutEnabled()) return name;
   if (!Number.isFinite(cutLength)) return name;
   return `${name} (${formatVariantLength(cutLength)}m)`;
 }
@@ -479,15 +504,35 @@ function updateVariantFilesHint() {
   const hint = document.getElementById("imagesFilesHint");
   if (!hint) return;
 
+  const isFabricCut = isFabricCutEnabled();
+
   const totalRows = variantRowsData.length;
   const withImage = variantRowsData.filter((row) => Boolean(row.file || row.existingUrl)).length;
 
   if (!totalRows) {
-    hint.textContent = "Mỗi dòng gồm ảnh, tên màu, chiều dài khúc (m), giá theo khổ và số mét tồn";
+    hint.textContent = isFabricCut
+      ? "Mỗi dòng gồm ảnh, tên màu, chiều dài khúc (m), giá theo khổ và số mét tồn"
+      : "Mỗi dòng gồm ảnh, tên màu, giá theo khổ và số mét tồn. Chiều dài khúc chỉ dùng cho vải khúc.";
     return;
   }
 
   hint.textContent = `Đã tạo ${totalRows} dòng màu, có ảnh ở ${withImage} dòng`;
+}
+
+function isFabricCutEnabled() {
+  return Boolean(document.getElementById("isFabricCut")?.checked);
+}
+
+function onFabricCutToggle() {
+  if (isFabricCutEnabled()) {
+    variantRowsData.forEach((row) => {
+      if (!Number.isFinite(row?.cutLength) || row.cutLength <= 0) {
+        row.cutLength = 1;
+      }
+    });
+  }
+  renderVariantRows();
+  updateVariantFilesHint();
 }
 
 function createVariantRowData(name = "", existingUrl = "", colorStock = null, cutLength = null, variantPrice = null, variantOldPrice = null) {
@@ -544,6 +589,8 @@ function renderVariantRows() {
   const container = document.getElementById("variantRows");
   if (!container) return;
 
+  const isFabricCut = isFabricCutEnabled();
+
   cleanupVariantObjectUrls();
 
   if (!variantRowsData.length) {
@@ -574,12 +621,14 @@ function renderVariantRows() {
             />
           </div>
           <div class="variant-field">
-            <span class="variant-field-label">Chiều dài mỗi khúc (m)</span>
+            <span class="variant-field-label">${isFabricCut ? "Chiều dài mỗi khúc (m)" : "Chiều dài khúc (tùy chọn)"}</span>
             <input
-              type="text"
+              type="number"
+              min="0.01"
+              step="0.01"
               class="variant-length-input"
-              value="${Number.isFinite(Number(row.cutLength)) ? formatVariantLength(row.cutLength) : ""}"
-              placeholder="Ví dụ: 2.7"
+              value="${Number.isFinite(row.cutLength) ? formatVariantLength(row.cutLength) : (isFabricCut ? "1" : "")}"
+              placeholder="${isFabricCut ? "Ví dụ: 2.7" : "Chỉ nhập nếu là vải khúc"}"
               oninput="onVariantLengthInput('${row.id}', this.value)"
             />
           </div>
@@ -606,7 +655,7 @@ function renderVariantRows() {
             />
           </div>
           <div class="variant-field">
-            <span class="variant-field-label">Số mét tồn</span>
+            <span class="variant-field-label">${isFabricCut ? "Số mét tồn của các khúc" : "Số mét tồn"}</span>
             <input
               type="text"
               class="variant-stock-input"
@@ -626,7 +675,8 @@ function renderVariantRows() {
 }
 
 function addVariantRow(defaultName = "", existingUrl = "", defaultCutLength = null) {
-  variantRowsData.push(createVariantRowData(defaultName, existingUrl, null, defaultCutLength, null, null));
+  const nextCutLength = isFabricCutEnabled() && !Number.isFinite(defaultCutLength) ? 1 : defaultCutLength;
+  variantRowsData.push(createVariantRowData(defaultName, existingUrl, null, nextCutLength, null, null));
   syncVariantNamesByIndex();
   renderVariantRows();
 }
@@ -807,15 +857,25 @@ function formatMeterValue(value) {
   return safe.toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
 }
 
+function formatOrderItemQtyLabel(item) {
+  const qty = Math.max(0, Number(item?.qty) || 0);
+  const cutLength = getOrderItemCutLengthMeters(item);
+  if (item?.isFabricCut !== false && Number.isFinite(cutLength) && cutLength > 0) {
+    return `${formatMeterValue(qty * cutLength)}m`;
+  }
+  return `${formatMeterValue(qty)}m`;
+}
+
 function getOrderTotalMeters(order) {
   const items = Array.isArray(order?.items) ? order.items : [];
 
   const total = items.reduce((sum, item) => {
-    const cutLength = getOrderItemCutLengthMeters(item);
-    if (!Number.isFinite(cutLength) || cutLength <= 0) return sum;
-
     const qty = Math.max(0, Number(item?.qty) || 0);
-    return sum + (qty * cutLength);
+    const cutLength = getOrderItemCutLengthMeters(item);
+    if (item?.isFabricCut !== false && Number.isFinite(cutLength) && cutLength > 0) {
+      return sum + (qty * cutLength);
+    }
+    return sum + qty;
   }, 0);
 
   if (!Number.isFinite(total) || total <= 0) return null;
@@ -1027,7 +1087,9 @@ function buildProductInsightsRecords(orders) {
         variants: new Set()
       };
 
-      existing.totalQty += qty;
+      const cutLength = getOrderItemCutLengthMeters(item);
+      const meters = item?.isFabricCut !== false && Number.isFinite(cutLength) && cutLength > 0 ? qty * cutLength : qty;
+      existing.totalQty = Math.round((existing.totalQty + meters) * 100) / 100;
       existing.orderIds.add(orderId);
       if (variant) existing.variants.add(variant);
 
@@ -1135,7 +1197,7 @@ function renderProductInsightsView() {
   const list = document.getElementById("product-insights-list");
 
   if (totalProductsEl) totalProductsEl.textContent = String(records.length);
-  if (totalQtyEl) totalQtyEl.textContent = String(records.reduce((sum, item) => sum + item.totalQty, 0));
+  if (totalQtyEl) totalQtyEl.textContent = `${formatMeterValue(records.reduce((sum, item) => sum + item.totalQty, 0))}m`;
   if (topSkuEl) topSkuEl.textContent = records[0]?.sku || "-";
   if (topSkuLabelEl) topSkuLabelEl.textContent = productInsightsMode === "slow" ? "SKU bán chậm nhất" : "SKU bán chạy nhất";
   if (selectedYearEl) selectedYearEl.textContent = selectedYear || "Tất cả";
@@ -1157,7 +1219,7 @@ function renderProductInsightsView() {
         </div>
       </td>
       <td class="product-insights-category-cell">${product.category}</td>
-      <td class="product-insights-qty-cell">${product.totalQty}</td>
+      <td class="product-insights-qty-cell">${formatMeterValue(product.totalQty)}m</td>
       <td class="product-insights-time-cell">${formatOrderTime(product.latestAt)}</td>
     </tr>
   `).join("");
@@ -1168,6 +1230,7 @@ function resetProductForm() {
   const name = document.getElementById("name");
   const sku = document.getElementById("sku");
   const stock = document.getElementById("stock");
+  const isFabricCut = document.getElementById("isFabricCut");
   const category = document.getElementById("category");
   const imageUrl = document.getElementById("imageUrl");
   const modalTitle = document.getElementById("modal-title");
@@ -1181,6 +1244,7 @@ function resetProductForm() {
   if (name) name.value = "";
   if (sku) sku.value = "";
   if (stock) stock.value = "";
+  if (isFabricCut) isFabricCut.checked = false;
   const options = getCategoryOptions();
   if (category) {
     const selectableOptions = getSelectableCategoryOptions(options);
@@ -1322,7 +1386,7 @@ function exportOrdersExcel() {
     }[order.status] || order.status || "",
     "Sản phẩm": (order.items || []).map((item) => {
       const variantPart = item.variantName ? ` (${item.variantName}${item.size ? ` - ${item.size}` : ""})` : (item.size ? ` (${item.size})` : "");
-      return `${item.name}${variantPart} x${item.qty}`;
+      return `${item.name}${variantPart} x${formatOrderItemQtyLabel(item)}`;
     }).join("; ")
   }));
 
@@ -1363,7 +1427,7 @@ function exportOrdersPDF() {
     }[order.status] || order.status || "",
     (order.items || []).map((item) => {
       const variantPart = item.variantName ? ` (${item.variantName}${item.size ? ` - ${item.size}` : ""})` : (item.size ? ` (${item.size})` : "");
-      return `${item.name}${variantPart} x${item.qty}`;
+      return `${item.name}${variantPart} x${formatOrderItemQtyLabel(item)}`;
     }).join("; ")
   ]);
 
@@ -1426,6 +1490,7 @@ function openModal(product = null) {
   const name = document.getElementById("name");
   const sku = document.getElementById("sku");
   const stock = document.getElementById("stock");
+  const isFabricCut = document.getElementById("isFabricCut");
   const category = document.getElementById("category");
   const imageUrl = document.getElementById("imageUrl");
 
@@ -1441,6 +1506,7 @@ function openModal(product = null) {
     if (name) name.value = product.name || "";
     if (sku) sku.value = product.sku || "";
     if (stock) stock.value = product.stock || "";
+    if (isFabricCut) isFabricCut.checked = Boolean(product.isFabricCut);
     if (category) {
       const nextCategory = normalizeCategoryLabel(product.category || "");
       const selectableOptions = getSelectableCategoryOptions();
@@ -1592,6 +1658,7 @@ async function loadTrafficInsights() {
       || data.topProductClicks.some((product) => !product
         || !Number.isSafeInteger(product.productId) || product.productId < 1
         || typeof product.name !== "string" || typeof product.sku !== "string"
+        || typeof product.image !== "string"
         || !Number.isSafeInteger(product.clicks) || product.clicks < 1)
       || ![data.totalViews, data.uniqueVisitors, data.todayViews, data.averageDailyViews].every((value) => Number.isFinite(value) && value >= 0)
       || !Number.isFinite(Date.parse(data.startedAt))
@@ -1605,14 +1672,29 @@ async function loadTrafficInsights() {
     if (data.topProductClicks.length === 0) {
       const row = document.createElement("tr");
       const cell = document.createElement("td");
-      cell.colSpan = 4;
+      cell.colSpan = 5;
       cell.textContent = "Chưa có lượt click sản phẩm trong khoảng thời gian này.";
       row.appendChild(cell);
       productClicksList.appendChild(row);
     } else {
       data.topProductClicks.forEach((product, index) => {
         const row = document.createElement("tr");
-        [String(index + 1), product.sku || "—", product.name, numbers.format(product.clicks)].forEach((value) => {
+        const rankCell = document.createElement("td");
+        rankCell.textContent = String(index + 1);
+        const imageCell = document.createElement("td");
+        if (product.image) {
+          const image = document.createElement("img");
+          image.src = product.image;
+          image.alt = product.name;
+          image.className = "traffic-product-image";
+          image.loading = "lazy";
+          image.decoding = "async";
+          imageCell.appendChild(image);
+        } else {
+          imageCell.textContent = "—";
+        }
+        row.append(rankCell, imageCell);
+        [product.sku || "—", product.name, numbers.format(product.clicks)].forEach((value) => {
           const cell = document.createElement("td");
           cell.textContent = value;
           row.appendChild(cell);
@@ -1703,10 +1785,8 @@ async function load() {
       shopLink.textContent = category ? `🛒 Giỏ hàng ${category}` : "🛒 Xem giỏ hàng";
     }
 
-    const filtered = categoryScopedData.filter((p) => {
-      const haystack = `${p.name || ""} ${p.sku || ""}`.toLowerCase();
-      return haystack.includes(search);
-    });
+    const filtered = filterAdminProducts(categoryScopedData, search);
+    updatePurchaseLimitSelectAllButton();
 
     const totalItems = filtered.length;
     const totalPages = Math.max(1, Math.ceil(totalItems / PRODUCT_PAGE_SIZE));
@@ -1726,10 +1806,19 @@ async function load() {
           <td class="drag-cell">
             <span class="drag-handle" data-product-id="${p.id}" title="Giữ và kéo để đổi thứ tự">☰</span>
           </td>
+          <td>
+            <input type="checkbox" class="purchase-limit-product-checkbox" value="${p.id}"
+              aria-label="Áp dụng giới hạn cho sản phẩm"
+              ${purchaseLimitSelectedIds.has(Number(p.id)) ? "checked" : ""}
+              ${purchaseLimitBusy || !purchaseLimitSettings || !p.isFabricCut ? "disabled" : ""}
+              title="${p.isFabricCut ? "Mỗi số điện thoại chỉ được mua 1 khúc cho mã này" : "Chỉ áp dụng giới hạn cho vải khúc"}"
+              onchange="selectPurchaseLimitProduct(this)">
+          </td>
           <td><img src="${p.image || "https://placehold.co/80x80?text=No+Image"}" width="60" height="60" loading="lazy" decoding="async" style="object-fit:cover"></td>
           <td class="product-name-cell">
             <div class="product-name-wrap">
               <span class="product-title">${p.name}</span>
+              ${p.isFabricCut ? '<span class="fabric-cut-badge">Vải khúc</span>' : ""}
               <span class="product-sku">${visibilityLabel}</span>
               ${p.sku ? `<span class="product-sku">SKU: ${p.sku}</span>` : ""}
             </div>
@@ -1742,12 +1831,12 @@ async function load() {
             </div>
           </td>
           <td>
-            <div class="stock-inline">
-              <input type="number" min="0" step="0.01" value="${p.stock}" id="stock-${p.id}" />
-              <button onclick="updateStock(${p.id})">Cập nhật</button>
-            </div>
+            <span class="product-stock-value">${Number(p.stock || 0).toLocaleString("vi-VN")} mét</span>
           </td>
-          <td>${status}</td>
+          <td>
+            ${status}
+            <span class="purchase-limit-active-status" ${p.isPurchaseLimited ? "" : "hidden"}>Đang bật giới hạn</span>
+          </td>
           <td>
             <div class="action">
               <a class="product-link-btn" href="${getProductShopUrl(p)}" target="_blank" rel="noopener noreferrer" title="Mở link riêng sản phẩm">🔗</a>
@@ -1760,7 +1849,8 @@ async function load() {
       `;
     });
 
-    if (list) list.innerHTML = html || '<tr><td colspan="8">Không có sản phẩm</td></tr>';
+    if (list) list.innerHTML = html || '<tr><td colspan="9">Không có sản phẩm</td></tr>';
+    renderPurchaseLimitStatus();
     renderPagination("product-pagination", "products", totalItems, PRODUCT_PAGE_SIZE, (page) => {
       setPaginationPage("products", page);
       load();
@@ -1789,6 +1879,146 @@ async function load() {
 
 async function refreshDashboard() {
   await Promise.all([load(), loadOrders()]);
+}
+
+let purchaseLimitSettings = null;
+let purchaseLimitBusy = false;
+let purchaseLimitSelectedIds = new Set();
+
+function filterAdminProducts(products, search) {
+  return products.filter((product) => `${product.name || ""} ${product.sku || ""}`.toLowerCase().includes(search));
+}
+
+function selectAllPurchaseLimitProducts() {
+  if (purchaseLimitBusy || !purchaseLimitSettings) return;
+  const search = (document.getElementById("search")?.value || "").toLowerCase();
+  const products = filterAdminProducts(state.products, search).filter((product) => product.isFabricCut);
+  if (!products.length) {
+    showToast("Không có vải khúc trong danh sách đang lọc");
+    return;
+  }
+  const deselect = products.every((product) => purchaseLimitSelectedIds.has(Number(product.id)));
+  products.forEach((product) => {
+    if (deselect) purchaseLimitSelectedIds.delete(Number(product.id));
+    else purchaseLimitSelectedIds.add(Number(product.id));
+  });
+  savePurchaseLimit(false);
+}
+
+function updatePurchaseLimitSelectAllButton() {
+  const search = (document.getElementById("search")?.value || "").toLowerCase();
+  const products = filterAdminProducts(state.products, search).filter((product) => product.isFabricCut);
+  const allSelected = products.length > 0 && products.every((product) => purchaseLimitSelectedIds.has(Number(product.id)));
+  const button = document.getElementById("purchase-limit-select-all");
+  button.textContent = allSelected ? "Bỏ chọn tất cả" : "Chọn tất cả";
+  button.setAttribute("aria-pressed", String(allSelected));
+}
+
+function selectPurchaseLimitProduct(input) {
+  if (purchaseLimitBusy || !purchaseLimitSettings) return;
+  const id = Number(input.value);
+  if (!state.products.some((product) => Number(product.id) === id && product.isFabricCut)) {
+    input.checked = false;
+    showToast("Giới hạn chỉ áp dụng cho vải khúc");
+    return;
+  }
+  if (input.checked) purchaseLimitSelectedIds.add(id);
+  else purchaseLimitSelectedIds.delete(id);
+  savePurchaseLimit(false);
+}
+
+function renderPurchaseLimitStatus() {
+  document.querySelectorAll(".product-row").forEach((row) => {
+    const id = Number(row.dataset.productId);
+    const product = state.products.find((item) => Number(item.id) === id);
+    const active = product?.isFabricCut && (purchaseLimitSettings
+      ? purchaseLimitSettings.enabled && purchaseLimitSettings.productIds.includes(id)
+      : product.isPurchaseLimited);
+    const status = row.querySelector(".purchase-limit-active-status");
+    if (status) status.hidden = !active;
+  });
+  document.querySelectorAll(".purchase-limit-product-checkbox").forEach((input) => {
+    input.disabled = purchaseLimitBusy || !purchaseLimitSettings
+      || !state.products.some((product) => Number(product.id) === Number(input.value) && product.isFabricCut);
+    input.checked = purchaseLimitSelectedIds.has(Number(input.value));
+  });
+  const toggle = document.getElementById("purchase-limit-toggle");
+  toggle.disabled = purchaseLimitBusy || !purchaseLimitSettings
+    || (!purchaseLimitSettings.enabled && purchaseLimitSelectedIds.size === 0);
+  document.getElementById("purchase-limit-select-all").disabled = purchaseLimitBusy || !purchaseLimitSettings;
+  updatePurchaseLimitSelectAllButton();
+  if (!purchaseLimitSettings) return;
+  toggle.setAttribute("aria-checked", String(purchaseLimitSettings.enabled));
+  toggle.textContent = purchaseLimitSettings.enabled ? "Tắt giới hạn" : "Bật giới hạn";
+  const status = document.getElementById("purchase-limit-status");
+  const selectedCount = document.createElement("strong");
+  selectedCount.className = "purchase-limit-selected-count";
+  selectedCount.textContent = `${purchaseLimitSettings.productIds.length} sản phẩm đã chọn`;
+  status.replaceChildren(
+    document.createTextNode(purchaseLimitSettings.enabled ? "Đang bật • " : "Đang tắt • "),
+    selectedCount,
+    document.createTextNode(purchaseLimitSettings.enabled
+      ? ` • Đợt bắt đầu ${new Date(purchaseLimitSettings.startedAt).toLocaleString("vi-VN")}`
+      : " • Khách có thể mua nhiều lần.")
+  );
+}
+
+async function loadPurchaseLimitSettings() {
+  if (purchaseLimitBusy) return;
+  purchaseLimitBusy = true;
+  renderPurchaseLimitStatus();
+  try {
+    const settingsRes = await fetch(API + "/settings/purchase-limit");
+    const settingsResult = await readApiResponseSafely(settingsRes);
+    if (!settingsRes.ok) throw new Error(getApiErrorMessage(settingsRes, settingsResult.raw, settingsResult.data, "Không thể tải giới hạn mua", settingsResult.requestId));
+    const settings = settingsResult.data;
+    if (!settings || typeof settings.enabled !== "boolean" || !Array.isArray(settings.productIds)
+      || settings.productIds.some((id) => !Number.isSafeInteger(id) || id <= 0)
+      || typeof settings.roundId !== "string") throw new Error("Cấu hình giới hạn mua không hợp lệ");
+    purchaseLimitSettings = settings;
+    purchaseLimitSelectedIds = new Set(settings.productIds);
+  } catch (error) {
+    purchaseLimitSettings = null;
+    console.error("Không thể tải giới hạn mua:", error);
+    document.getElementById("purchase-limit-status").textContent = error.message;
+    showToast(error.message);
+  } finally {
+    purchaseLimitBusy = false;
+    renderPurchaseLimitStatus();
+  }
+}
+
+async function savePurchaseLimit(toggle) {
+  if (purchaseLimitBusy || !purchaseLimitSettings) return;
+  const productIds = [...purchaseLimitSelectedIds];
+  const enabled = toggle ? !purchaseLimitSettings.enabled : purchaseLimitSettings.enabled;
+  if (toggle && enabled && !productIds.length) {
+    purchaseLimitSelectedIds = new Set(purchaseLimitSettings.productIds);
+    renderPurchaseLimitStatus();
+    showToast("Vui lòng chọn ít nhất một sản phẩm trước khi bật");
+    return;
+  }
+  purchaseLimitBusy = true;
+  renderPurchaseLimitStatus();
+  try {
+    const res = await fetch(API + "/settings/purchase-limit", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled, productIds, roundId: purchaseLimitSettings.roundId })
+    });
+    const result = await readApiResponseSafely(res);
+    if (!res.ok) throw new Error(getApiErrorMessage(res, result.raw, result.data, "Không thể lưu giới hạn mua", result.requestId));
+    purchaseLimitSettings = result.data;
+    purchaseLimitSelectedIds = new Set(purchaseLimitSettings.productIds);
+    showToast(toggle && !enabled ? "Đã tắt giới hạn và bỏ chọn tất cả sản phẩm" : "Đã lưu cấu hình giới hạn mua");
+  } catch (error) {
+    console.error("Không thể lưu giới hạn mua:", error);
+    purchaseLimitSelectedIds = new Set(purchaseLimitSettings.productIds);
+    showToast(error.message);
+  } finally {
+    purchaseLimitBusy = false;
+    renderPurchaseLimitStatus();
+  }
 }
 
 async function uploadImage(file) {
@@ -1851,6 +2081,7 @@ async function saveProduct() {
   const sku = document.getElementById("sku").value.trim();
   const category = document.getElementById("category").value;
   const stock = document.getElementById("stock").value;
+  const isFabricCut = isFabricCutEnabled();
   const productId = document.getElementById("productId").value;
   const saveBtn = document.querySelector(".btn-save");
 
@@ -1901,7 +2132,7 @@ async function saveProduct() {
       const missingFields = [];
       if (!Boolean(row.file || row.existingUrl)) missingFields.push("Ảnh màu");
       if (!row.rawName) missingFields.push("Tên màu");
-      if (!Number.isFinite(Number(row.cutLength))) missingFields.push("Chiều dài mỗi khúc (m)");
+      if (isFabricCut && !Number.isFinite(row.cutLength)) missingFields.push("Chiều dài mỗi khúc (m)");
       if (!Number.isFinite(Number(row.variantPrice))) missingFields.push("Giá khổ này (đ)");
       if (!Number.isFinite(Number(row.colorStock))) missingFields.push("Số mét tồn");
       if (missingFields.length) {
@@ -1934,6 +2165,7 @@ async function saveProduct() {
       .map((row, index) => ({
         name: composeVariantName(row, index),
         image: uploadedVariantImages[index] || row.existingUrl || fallbackExistingImages[index] || baseVariantImage,
+        cutLength: isFabricCut ? parseVariantLengthInput(row.cutLength) : null,
         variantPrice: Number.isFinite(Number(row.variantPrice)) ? Math.max(0, Math.round(Number(row.variantPrice))) : null,
         variantOldPrice: Number.isFinite(Number(row.variantOldPrice)) ? Math.max(0, Math.round(Number(row.variantOldPrice))) : null,
         colorStock: Number.isFinite(Number(row.colorStock)) ? Math.max(0, Math.round(Number(row.colorStock) * 100) / 100) : null
@@ -1983,6 +2215,7 @@ async function saveProduct() {
 
     const variantCutLengths = finalVariantRows.length
       ? finalVariantRows.map((row) => {
+          if (!isFabricCut) return null;
           const length = parseVariantLengthInput(row.cutLength);
           return Number.isFinite(length) ? length : null;
         })
@@ -2017,7 +2250,7 @@ async function saveProduct() {
       res = await fetch(API + (isEditing ? `/product/${productId}` : "/product/add"), {
         method: isEditing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, sku, category, price: Math.round(basePriceFromFirstVariant), oldPrice: variantOldPrices[0] ?? null, stock: stockValueForSave, image: finalImage, images, variantNames, variantPrices, variantOldPrices, variantCutLengths, sizes, variantSizes, variantColorStocks }),
+        body: JSON.stringify({ name, sku, category, price: Math.round(basePriceFromFirstVariant), oldPrice: variantOldPrices[0] ?? null, stock: stockValueForSave, image: finalImage, images, variantNames, variantPrices, variantOldPrices, variantCutLengths, sizes, variantSizes, variantColorStocks, isFabricCut }),
         signal: saveController ? saveController.signal : undefined
       });
     } catch (error) {
@@ -2038,7 +2271,7 @@ async function saveProduct() {
 
     showToast(isEditing ? "Đã cập nhật sản phẩm" : "Đã thêm sản phẩm");
     closeModal();
-    await load();
+    await Promise.all([load(), loadPurchaseLimitSettings()]);
     loadOrders();
   } catch (error) {
     console.error(error);
@@ -2100,7 +2333,7 @@ async function loadOrders() {
         const items = Array.isArray(order.items) ? order.items : [];
         const itemSummary = items.map((item) => {
           const variantPart = item.variantName ? ` (${item.variantName}${item.size ? ` - ${item.size}` : ""})` : (item.size ? ` (${item.size})` : "");
-          return `<span class="order-item-pill">${item.name}${variantPart} x${item.qty}</span>`;
+          return `<span class="order-item-pill">${item.name}${variantPart} x${formatOrderItemQtyLabel(item)}</span>`;
         }).join("");
 
         const skuSummary = [...new Set(items
@@ -2222,29 +2455,6 @@ async function deleteOrder(id) {
     console.error(error);
     showToast("Lỗi khi xóa đơn hàng");
     return false;
-  }
-}
-
-async function updateStock(id) {
-  const input = document.getElementById(`stock-${id}`);
-  const stock = Number(input?.value || 0);
-
-  try {
-    const res = await fetch(API + "/product/stock", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, stock })
-    });
-
-    if (!res.ok) {
-      throw new Error("Không thể cập nhật tồn kho");
-    }
-
-    showToast("Đã cập nhật tồn kho");
-    await refreshDashboard();
-  } catch (error) {
-    console.error(error);
-    showToast("Lỗi cập nhật tồn kho");
   }
 }
 
@@ -2373,12 +2583,12 @@ window.onVariantLengthInput = onVariantLengthInput;
 window.onVariantPriceInput = onVariantPriceInput;
 window.onVariantOldPriceInput = onVariantOldPriceInput;
 window.onVariantStocksInput = onVariantStocksInput;
+window.onFabricCutToggle = onFabricCutToggle;
 window.saveProduct = saveProduct;
 window.load = load;
 window.switchTab = switchTab;
 window.updateOrderStatus = updateOrderStatus;
 window.deleteOrder = deleteOrder;
-window.updateStock = updateStock;
 window.editProduct = editProduct;
 window.deleteProduct = deleteProduct;
 window.toggleProductVisibility = toggleProductVisibility;
@@ -2400,6 +2610,7 @@ window.addEventListener("hashchange", () => switchTab(window.location.hash.slice
 switchTab(window.location.hash.slice(1) || "products");
 
 loadBrandSettings();
+loadPurchaseLimitSettings();
 refreshDashboard();
 setInterval(() => {
   loadOrders();

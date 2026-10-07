@@ -521,6 +521,28 @@
       font-weight: 700;
     }
 
+    .qty-input {
+      width: 72px;
+      text-align: center;
+      border: 1px solid var(--border);
+      border-radius: 8px 0 0 8px;
+      padding: 4px 6px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .qty-unit {
+      border: 1px solid var(--border);
+      border-left: 0;
+      border-radius: 0 8px 8px 0;
+      padding: 4px 8px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--muted);
+      background: #f8fafc;
+      line-height: 1.2;
+    }
+
     .cart-total {
       margin-top: 16px;
       padding-top: 16px;
@@ -1507,6 +1529,7 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/quantity-utils.js"></script>
   <script>
     const API = window.location.origin || "http://localhost:3000";
     const socket = window.io ? window.io(API) : null;
@@ -1685,27 +1708,35 @@
       const colorStock = matrix[safeIndex];
       const totalStock = Number(product?.stock ?? fallbackStock);
       const safeTotalStock = Number.isFinite(totalStock) ? Math.max(0, totalStock) : 0;
-      const variantName = getVariantDisplayName(product, safeIndex, getVariantImages(product)[safeIndex] || "");
-      const cutLength = getVariantCutLength(product, safeIndex, variantName);
-      const toPieces = (stockValue) => {
+      const cutLength = getVariantCutLength(product, safeIndex, getVariantDisplayName(product || {}, safeIndex, getVariantImages(product || {})[safeIndex] || ""));
+      const isFabricCut = Boolean(product?.isFabricCut) && Number.isFinite(Number(cutLength)) && Number(cutLength) > 0;
+
+      const toMeters = (stockValue) => {
         const safeStockValue = Number(stockValue);
         if (!Number.isFinite(safeStockValue) || safeStockValue <= 0) return 0;
-        if (Number.isFinite(cutLength) && cutLength > 0) {
-          return Math.max(0, Math.floor((safeStockValue + 1e-9) / cutLength));
-        }
-        return Math.max(0, Math.floor(safeStockValue));
+        return Math.max(0, Math.round(safeStockValue * 100) / 100);
+      };
+
+      const toQuantityUnits = (stockValue) => {
+        const meters = toMeters(stockValue);
+        if (!isFabricCut) return meters;
+        return Math.max(0, Math.floor((meters + 1e-9) / Number(cutLength)));
       };
 
       if (Number.isFinite(Number(colorStock))) {
-        return Math.min(toPieces(colorStock), toPieces(safeTotalStock));
+        return Math.min(toQuantityUnits(colorStock), toQuantityUnits(safeTotalStock));
       }
 
       const combo = Number(product?.comboStock);
-      if (Number.isFinite(combo)) return Math.max(0, Math.floor(combo));
+      if (Number.isFinite(combo)) return toQuantityUnits(combo);
 
-      if (Number.isFinite(safeTotalStock)) return toPieces(safeTotalStock);
+      if (Number.isFinite(safeTotalStock)) return toQuantityUnits(safeTotalStock);
 
       return 0;
+    }
+
+    function isFabricCutProduct(product) {
+      return Boolean(product?.isFabricCut);
     }
 
     function getAvailableSizesByVariant(product, variantIndex, fallbackSize = "") {
@@ -1771,16 +1802,41 @@
       return safe.toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
     }
 
-    function formatCartQtyDisplay(qty, cutLengthMeters) {
-      const pieces = Math.max(0, Math.floor(Number(qty) || 0));
+    function formatCartQtyDisplay(qty, cutLengthMeters, product = null) {
+      const amount = QuantityUtils.normalizeQuantityValue(qty, 0);
       const unitLength = Number(cutLengthMeters);
-
-      if (!Number.isFinite(unitLength) || unitLength <= 0) {
-        return `${pieces}`;
+      const isFabricCut = isFabricCutProduct(product) && Number.isFinite(unitLength) && unitLength > 0;
+      if (amount <= 0) {
+        return `${QuantityUtils.formatQuantityValue(amount)}`;
       }
 
-      const totalMeters = Math.round(pieces * unitLength * 100) / 100;
-      return `${formatMeterValue(totalMeters)}m`;
+      if (isFabricCut) {
+        return `${formatMeterValue(amount * unitLength)}m`;
+      }
+
+      return `${formatMeterValue(amount)}m`;
+    }
+
+    function getQuantityStepForProduct(product) {
+      return isFabricCutProduct(product) ? 1 : QuantityUtils.getQuantityStep();
+    }
+
+    function getQuantityMinForProduct(product) {
+      return 1;
+    }
+
+    function getQuantityUnitLabel(product) {
+      return isFabricCutProduct(product) ? "khúc" : "m";
+    }
+
+    function normalizeQtyForProduct(product, rawValue, maxQty = Number.MAX_SAFE_INTEGER) {
+      if (product?.isPurchaseLimited) maxQty = Math.min(1, maxQty);
+      const minQty = getQuantityMinForProduct(product);
+      const parsedValue = QuantityUtils.parseQuantityInputValue(rawValue, minQty);
+      const normalizedValue = isFabricCutProduct(product)
+        ? Math.max(0, Math.floor(parsedValue + 1e-9))
+        : parsedValue;
+      return QuantityUtils.clampQuantity(normalizedValue, maxQty, minQty);
     }
 
     function getVariantStockMeters(product, variantIndex, fallbackStock = 0) {
@@ -1804,11 +1860,11 @@
       const pieces = getColorStockByVariant(product, safeIndex, fallbackStock);
 
       if (!Number.isFinite(cutLength) || cutLength <= 0) {
-        return `${pieces}`;
+        return `${formatMeterValue(pieces)}m`;
       }
 
       const meters = getVariantStockMeters(product, safeIndex, fallbackStock);
-      return `${formatMeterValue(meters)}m (${pieces} khúc)`;
+      return `${formatMeterValue(meters)}m`;
     }
 
     function getPopupItemKey(productId, variantKey = "", sizeKey = "", itemKey = "") {
@@ -1829,9 +1885,9 @@
         const sameByImage = safeImage && itemImage === safeImage;
         const sameByName = !safeImage && safeName && itemName === safeName;
 
-        if (!sameByImage && !sameByName) return sum;
+        if (!productsById.get(targetId)?.isPurchaseLimited && !sameByImage && !sameByName) return sum;
 
-        return sum + Math.max(0, Math.floor(Number(item?.qty) || 0));
+        return sum + Math.max(0, QuantityUtils.normalizeQuantityValue(item?.qty, 0));
       }, 0);
     }
 
@@ -2132,9 +2188,9 @@
         });
 
         const primary = { ...ranked[0] };
-        const totalQty = group.reduce((sum, item) => sum + Math.max(0, Math.floor(Number(item?.qty) || 0)), 0);
+        const totalQty = QuantityUtils.roundQuantity(group.reduce((sum, item) => sum + QuantityUtils.normalizeQuantityValue(item?.qty, 0), 0));
         const primaryLimitRaw = Number.isFinite(Number(primary?.comboStock)) ? Number(primary.comboStock) : Number(primary?.stock || totalQty);
-        const primaryLimit = Math.max(0, Math.floor(primaryLimitRaw || 0));
+        const primaryLimit = QuantityUtils.normalizeQuantityValue(primaryLimitRaw, 0);
         primary.qty = Math.min(totalQty, primaryLimit || totalQty);
 
         if (primary.qty > 0) compacted.push(primary);
@@ -2211,8 +2267,8 @@
     function updateShopCartBadge() {
       const badge = document.getElementById("shopCartBadge");
       if (!badge) return;
-      const totalQty = (Array.isArray(latestCartItems) ? latestCartItems : []).reduce((sum, item) => sum + Math.max(0, Math.floor(Number(item?.qty) || 0)), 0);
-      badge.textContent = String(totalQty);
+      const totalQty = (Array.isArray(latestCartItems) ? latestCartItems : []).reduce((sum, item) => sum + Math.max(0, QuantityUtils.normalizeQuantityValue(item?.qty, 0)), 0);
+      badge.textContent = String(QuantityUtils.formatQuantityValue(totalQty));
       badge.classList.toggle("hidden", totalQty <= 0);
     }
 
@@ -2241,7 +2297,7 @@
       quickOrderState.variantIndex = variantIndex;
       quickOrderState.size = matchedSize || sizes[0] || currentSize;
       const stock = getColorStockByVariant(product, variantIndex, Number(product?.stock || 0));
-      quickOrderState.qty = Math.max(1, Math.min(Number(quickOrderState.qty || 1), Math.max(1, stock)));
+      quickOrderState.qty = normalizeQtyForProduct(product, quickOrderState.qty, stock);
     }
 
     async function refreshRealtimeData() {
@@ -2607,7 +2663,7 @@
         const selectedVariantImage = variants[selectedVariantIndex] || item.image || product?.image || "https://placehold.co/80x80?text=No+Image";
         const selectedVariantName = item.variantName || getVariantDisplayName(product || item, selectedVariantIndex, selectedVariantImage);
         const cutLengthMeters = getVariantCutLength(product || item, selectedVariantIndex, selectedVariantName || item.variantName || "");
-        const qtyDisplay = formatCartQtyDisplay(item.qty, cutLengthMeters);
+        const qtyDisplay = formatCartQtyDisplay(item.qty, cutLengthMeters, product || item);
         const sizes = getAvailableSizesByVariant(product || item, selectedVariantIndex, selectedSize);
         const finalSelectedSize = sizes.find((size) => size.toLowerCase() === selectedSize.toLowerCase()) || sizes[0] || selectedSize;
         const comboStock = getColorStockByVariant(product || item, selectedVariantIndex, Number(item.comboStock ?? product?.stock ?? item.stock ?? 0));
@@ -2678,9 +2734,9 @@
             <div class="popup-qty-row">
               <span>${Number.isFinite(cutLengthMeters) ? "Chiều dài" : "Số lượng"}</span>
               <div class="qty-control">
-                <button class="qty-btn" onclick='changeQtyPopup(${item.id}, ${item.qty - 1}, ${JSON.stringify(item.variantKey || "default")}, ${JSON.stringify(item.sizeKey || "size:default")}, ${JSON.stringify(item.itemKey || "")})'>−</button>
+                <button class="qty-btn" data-qty-action="minus" data-qty-target="popup" data-item-id="${item.id}" data-variant-key="${String(item.variantKey || "default")}" data-size-key="${String(item.sizeKey || "size:default")}" data-item-key="${String(item.itemKey || "")}">−</button>
                 <span class="qty-value">${qtyDisplay}</span>
-                <button class="qty-btn" ${item.qty >= comboStock ? "disabled" : ""} onclick='changeQtyPopup(${item.id}, ${item.qty + 1}, ${JSON.stringify(item.variantKey || "default")}, ${JSON.stringify(item.sizeKey || "size:default")}, ${JSON.stringify(item.itemKey || "")})'>+</button>
+                <button class="qty-btn" data-qty-action="plus" data-qty-target="popup" data-item-id="${item.id}" data-variant-key="${String(item.variantKey || "default")}" data-size-key="${String(item.sizeKey || "size:default")}" data-item-key="${String(item.itemKey || "")}" ${Number(item.qty) + getQuantityStepForProduct(product || item) > comboStock || product?.isPurchaseLimited && Number(item.qty) >= 1 ? "disabled" : ""}>+</button>
               </div>
             </div>
             ` : ""}
@@ -2721,6 +2777,7 @@
       `;
 
       popupBody.innerHTML = html;
+      bindQuantityButtons();
     }
 
     async function changeQtyPopup(id, qty, variantKey = "", sizeKey = "", itemKey = "") {
@@ -2928,9 +2985,6 @@
             </div>
             ${group.items.map(({ item, product }) => {
               const comboStock = Number(item?.comboStock);
-              const stockLimit = Number.isFinite(comboStock)
-                ? Math.max(0, Math.floor(comboStock))
-                : Math.max(0, Math.floor(Number(product?.stock ?? item.stock ?? 0) || 0));
               const variants = getVariantImages(product || item);
               const variantNames = getVariantNames(product || item);
               const selectedVariantIndexByImage = variants.findIndex((url) => url === String(item.image || ""));
@@ -2938,11 +2992,14 @@
               const selectedVariantIndex = selectedVariantIndexByImage >= 0
                 ? selectedVariantIndexByImage
                 : (selectedVariantIndexByName >= 0 ? selectedVariantIndexByName : 0);
+              const stockLimit = Number.isFinite(comboStock)
+                ? Math.max(0, comboStock)
+                : Math.max(0, getColorStockByVariant(product || item, selectedVariantIndex, Number(product?.stock ?? item.stock ?? 0) || 0));
               const unitPrice = Number(getVariantPrice(product || item, selectedVariantIndex) ?? item.price ?? product?.price ?? 0);
               const unitOldPrice = Number(getVariantOldPrice(product || item, selectedVariantIndex) ?? item.oldPrice ?? product?.oldPrice ?? unitPrice);
               const selectedVariantName = item.variantName || getVariantDisplayName(product || item, selectedVariantIndex, variants[selectedVariantIndex] || item.image || "");
               const cutLengthMeters = getVariantCutLength(product || item, selectedVariantIndex, selectedVariantName || item.variantName || "");
-              const qtyDisplay = formatCartQtyDisplay(item.qty, cutLengthMeters);
+              const qtyDisplay = formatCartQtyDisplay(item.qty, cutLengthMeters, product || item);
               const sizeOptions = getAvailableSizesByVariant(product || item, selectedVariantIndex, item.selectedSize || "");
               const selectedSize = sizeOptions.find((size) => size.toLowerCase() === String(item.selectedSize || "").trim().toLowerCase()) || sizeOptions[0] || String(item.selectedSize || "");
               return `
@@ -2971,9 +3028,10 @@
                       ` : ""}
                     </div>
                     <div class="qty-control">
-                      <button class="qty-btn" onclick='changeQty(${item.id}, ${item.qty - 1}, ${JSON.stringify(item.variantKey || "default")}, ${JSON.stringify(item.sizeKey || "size:default")}, ${JSON.stringify(item.itemKey || "")})'>−</button>
-                      <span class="qty-value">${qtyDisplay}</span>
-                      <button class="qty-btn" ${item.qty >= stockLimit ? "disabled" : ""} onclick='changeQty(${item.id}, ${item.qty + 1}, ${JSON.stringify(item.variantKey || "default")}, ${JSON.stringify(item.sizeKey || "size:default")}, ${JSON.stringify(item.itemKey || "")})'>+</button>
+                      <button class="qty-btn" data-qty-action="minus" data-qty-target="cart" data-item-id="${item.id}" data-variant-key="${String(item.variantKey || "default")}" data-size-key="${String(item.sizeKey || "size:default")}" data-item-key="${String(item.itemKey || "")}">−</button>
+                      <input class="qty-input" type="number" min="${getQuantityMinForProduct(product || item)}" max="${product?.isPurchaseLimited ? 1 : stockLimit}" step="${getQuantityStepForProduct(product || item)}" value="${QuantityUtils.formatQuantityValue(item.qty)}" onchange='applyQtyInput(${item.id}, this.value, ${JSON.stringify(item.variantKey || "default")}, ${JSON.stringify(item.sizeKey || "size:default")}, ${JSON.stringify(item.itemKey || "")}, ${stockLimit})' />
+                      <span class="qty-unit">${getQuantityUnitLabel(product || item)}</span>
+                      <button class="qty-btn" data-qty-action="plus" data-qty-target="cart" data-item-id="${item.id}" data-variant-key="${String(item.variantKey || "default")}" data-size-key="${String(item.sizeKey || "size:default")}" data-item-key="${String(item.itemKey || "")}" ${Number(item.qty) + getQuantityStepForProduct(product || item) > stockLimit || product?.isPurchaseLimited && Number(item.qty) >= 1 ? "disabled" : ""}>+</button>
                     </div>
                   </div>
                   <div class="price-block">
@@ -3009,6 +3067,7 @@
       document.getElementById("cart").innerHTML = html;
       restoreCheckoutDraft(draft);
       restoreCheckoutFocus(focusState);
+      bindQuantityButtons();
     }
 
     function renderQuickOrderPopup() {
@@ -3029,7 +3088,7 @@
       const selectedImage = variants[selectedVariantIndex] || product.image || "https://placehold.co/80x80?text=No+Image";
       const selectedVariantName = getVariantDisplayName(product, selectedVariantIndex, selectedImage);
       const cutLengthMeters = getVariantCutLength(product, selectedVariantIndex, selectedVariantName);
-      const quickQtyDisplay = formatCartQtyDisplay(Math.max(1, Number(quickOrderState.qty || 1)), cutLengthMeters);
+      const quickQtyDisplay = formatCartQtyDisplay(Math.max(getQuantityMinForProduct(product), Number(quickOrderState.qty || 1)), cutLengthMeters, product);
       const sizes = getAvailableSizesByVariant(product, selectedVariantIndex);
       const selectedSize = quickOrderState.size || sizes[0] || "";
       const stock = getColorStockByVariant(product, selectedVariantIndex, Number(product?.stock || 0));
@@ -3099,9 +3158,10 @@
 
           <div class="popup-section-title">Số lượng</div>
           <div class="qty-control quick-order-qty">
-            <button class="qty-btn" ${quickOrderState.qty <= 1 ? "disabled" : ""} onclick="changeQuickOrderQty(${quickOrderState.qty - 1})">−</button>
-            <span class="qty-value">${quickQtyDisplay}</span>
-            <button class="qty-btn" ${quickOrderState.qty >= stock ? "disabled" : ""} onclick="changeQuickOrderQty(${quickOrderState.qty + 1})">+</button>
+            <button class="qty-btn" data-qty-action="minus" data-qty-target="quick" ${quickOrderState.qty <= getQuantityMinForProduct(product) ? "disabled" : ""}>−</button>
+            <input class="qty-input" type="number" min="${getQuantityMinForProduct(product)}" max="${product.isPurchaseLimited ? 1 : stock}" step="${getQuantityStepForProduct(product)}" value="${QuantityUtils.formatQuantityValue(quickOrderState.qty)}" onchange='applyQuickOrderQtyInput(this.value)' />
+            <span class="qty-unit">${getQuantityUnitLabel(product)}</span>
+            <button class="qty-btn" data-qty-action="plus" data-qty-target="quick" ${Number(quickOrderState.qty) + getQuantityStepForProduct(product) > stock || product.isPurchaseLimited && Number(quickOrderState.qty) >= 1 ? "disabled" : ""}>+</button>
           </div>
 
           <div class="popup-selected-combo">${stock <= 0 ? "Sản phẩm đang hết hàng, vui lòng chọn màu khác" : `Quý khách đang chọn ${selectedVariantName}${selectedSize ? `, size ${selectedSize}` : ""} với số lượng ${quickQtyDisplay}`}</div>
@@ -3116,6 +3176,7 @@
           </form>
         </div>
       `;
+      bindQuantityButtons();
     }
 
     function selectQuickOrderVariant(variantIndex) {
@@ -3131,7 +3192,7 @@
 
       quickOrderState.variantIndex = safeIndex;
       quickOrderState.size = getAvailableSizesByVariant(product, safeIndex)[0] || "";
-      quickOrderState.qty = Math.min(Math.max(1, quickOrderState.qty || 1), stock);
+      quickOrderState.qty = Math.min(Math.max(getQuantityMinForProduct(product), quickOrderState.qty || 1), stock);
       renderQuickOrderPopup();
     }
 
@@ -3146,8 +3207,55 @@
       const product = getQuickOrderProduct();
       if (!product) return;
       const stock = getColorStockByVariant(product, getQuickOrderSelectedVariantIndex(product), Number(product?.stock || 0));
-      quickOrderState.qty = Math.max(1, Math.min(Math.max(1, Number(nextQty) || 1), Math.max(1, stock)));
+      quickOrderState.qty = normalizeQtyForProduct(product, nextQty, stock);
       renderQuickOrderPopup();
+    }
+
+    function applyQtyInput(id, rawValue, variantKey = "", sizeKey = "", itemKey = "", maxQty = 999999) {
+      const product = productsById.get(Number(id)) || null;
+      const nextQty = normalizeQtyForProduct(product, rawValue, maxQty);
+      changeQty(id, nextQty, variantKey, sizeKey, itemKey);
+    }
+
+    function applyQuickOrderQtyInput(rawValue) {
+      const product = getQuickOrderProduct();
+      if (!product) return;
+      const stock = getColorStockByVariant(product, getQuickOrderSelectedVariantIndex(product), Number(product?.stock || 0));
+      const nextQty = normalizeQtyForProduct(product, rawValue, stock);
+      changeQuickOrderQty(nextQty);
+    }
+
+    function bindQuantityButtons() {
+      document.querySelectorAll(".qty-btn[data-qty-action]").forEach((button) => {
+        const action = button.dataset.qtyAction;
+        const target = button.dataset.qtyTarget || "cart";
+        const itemId = button.dataset.itemId;
+        const variantKey = button.dataset.variantKey || "";
+        const sizeKey = button.dataset.sizeKey || "";
+        const itemKey = button.dataset.itemKey || "";
+
+        const handler = () => {
+          const product = target === "quick" ? getQuickOrderProduct() : (productsById.get(Number(itemId)) || null);
+          const delta = action === "plus" ? getQuantityStepForProduct(product) : -getQuantityStepForProduct(product);
+          if (target === "quick") {
+            if (!product) return;
+            const stock = getColorStockByVariant(product, getQuickOrderSelectedVariantIndex(product), Number(product?.stock || 0));
+            const nextQty = normalizeQtyForProduct(product, Number(quickOrderState.qty) + delta, stock);
+            changeQuickOrderQty(nextQty);
+            return;
+          }
+
+          const currentQty = Number((Array.isArray(latestCartItems) ? latestCartItems : []).find((item) => String(item.itemKey || "") === String(itemKey || "") || (Number(item.id) === Number(itemId) && String(item.variantKey || "") === String(variantKey || "") && String(item.sizeKey || "") === String(sizeKey || "")))?.qty || 0);
+          const nextQty = normalizeQtyForProduct(product, currentQty + delta, Number.MAX_SAFE_INTEGER);
+          if (target === "popup") {
+            changeQtyPopup(Number(itemId), nextQty, variantKey, sizeKey, itemKey);
+          } else {
+            changeQty(Number(itemId), nextQty, variantKey, sizeKey, itemKey);
+          }
+        };
+
+        button.onclick = handler;
+      });
     }
 
     async function removeItem(id, variantKey = "", sizeKey = "", itemKey = "") {
@@ -3210,7 +3318,7 @@
       const cartItems = Array.isArray(latestCartItems) ? latestCartItems : [];
       const currentItem = cartItems.find((item) => String(item.itemKey || "") === String(itemKey || ""))
         || cartItems.find((item) => Number(item.id) === Number(id));
-      const nextQty = Math.max(1, Math.min(Math.max(1, Number(currentItem?.qty || 1)), Math.max(1, stock)));
+      const nextQty = normalizeQtyForProduct(product, currentItem?.qty || 1, stock);
 
       const res = await fetch(API + "/change", {
         method: "POST",
