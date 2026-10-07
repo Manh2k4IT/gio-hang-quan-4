@@ -148,6 +148,13 @@ test("HTTP tracking excludes admin/API/bots/prefetch and persists after restart"
     const port = listener.address().port;
     await new Promise((resolve) => listener.close(resolve));
     const origin = `http://127.0.0.1:${port}`;
+    await fs.mkdir(path.join(testDir, "data"));
+    await fs.writeFile(path.join(testDir, "data", "state.json"), JSON.stringify({
+        products: [{ id: 1, name: "Legacy category product", sku: "LEGACY", price: 100, stock: 10, category: "LINEN TẰM GÂN THÊU" }],
+        orders: [],
+        cart: [],
+        settings: { productCategories: ["LINEN TẰM GÂN THÊU", "LINEN TẰM GÂN"] }
+    }));
     async function start() {
         child = spawn(process.execPath, ["server.js"], {
             cwd: __dirname,
@@ -180,6 +187,14 @@ test("HTTP tracking excludes admin/API/bots/prefetch and persists after restart"
         return res;
     }
     await start();
+    const settings = await (await fetch(`${origin}/settings`)).json();
+    assert.equal(settings.productCategories.filter((category) => category === "LINEN TẰM GÂN").length, 1);
+    assert.equal(settings.productCategories.includes("LINEN TẰM GÂN THÊU"), false);
+    for (const category of ["LINEN TẰM GÂN THÊU", "LINEN TẰM GÂN"]) {
+        const products = await (await fetch(`${origin}/products?category=${encodeURIComponent(category)}`)).json();
+        assert.equal(products.length, 1);
+        assert.equal(products[0].category, "LINEN TẰM GÂN");
+    }
     assert.equal((await insights()).totalViews, 0);
     const first = await visit("/shop.html");
     const cookie = first.headers.get("set-cookie").split(";")[0];

@@ -18,7 +18,7 @@ const FIXED_PRODUCT_CATEGORIES = [
   "LINEN TƠ MÀU",
   "LINEN ƯỚT",
   "LINEN BỐ SỚ XÉO",
-  "LINEN TẰM GÂN THÊU"
+  "LINEN TẰM GÂN"
 ];
 const CATEGORY_GROUPS = [
   {
@@ -45,6 +45,7 @@ const paginationState = {
 
 function normalizeCategoryLabel(value) {
   const next = String(value || "").trim().replace(/\s+/g, " ");
+  if (next.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() === "linen tam gan theu") return "LINEN TẰM GÂN";
   return next;
 }
 
@@ -683,11 +684,11 @@ function onVariantStocksInput(rowId, value) {
 
 function getAdminCategory() {
   const category = new URLSearchParams(window.location.search).get("category") || "";
-  return category.trim();
+  return normalizeCategoryLabel(category);
 }
 
 function normalizeCategoryKey(value) {
-  return String(value || "")
+  return normalizeCategoryLabel(value)
     .trim()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")

@@ -32,6 +32,8 @@ Server mac dinh chay o `http://localhost:3000`.
 
 ## Luu tru ben vung
 
+Danh muc `LINEN TAM GAN THEU` da doi thanh `LINEN TAM GAN`. Server tu chuyen ten cu trong san pham, gio hang, don hang va cai dat khi khoi dong; link danh muc cu van duoc nhan dien.
+
 Server tu dong luu du lieu vao file JSON de khong mat sau khi restart:
 
 - `DATA_DIR/state.json`: products, cart, orders, revision

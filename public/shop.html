@@ -1519,7 +1519,7 @@
       "LINEN TƠ MÀU",
       "LINEN ƯỚT",
       "LINEN BỐ SỚ XÉO",
-      "LINEN TẰM GÂN THÊU"
+      "LINEN TẰM GÂN"
     ];
     const selectedPopupVariantIndexByProduct = new Map();
     let popupActiveItemKey = "";
@@ -2041,7 +2041,7 @@
 
     function getCurrentCategory() {
       const category = new URLSearchParams(window.location.search).get("category") || "";
-      return category.trim();
+      return category ? normalizeCategory(category) : "";
     }
 
     function isCartView() {
@@ -2145,6 +2145,7 @@
 
     function normalizeCategory(value) {
       const raw = String(value || "Khác").trim();
+      if (raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() === "linen tam gan theu") return "LINEN TẰM GÂN";
       return raw || "Khác";
     }
 

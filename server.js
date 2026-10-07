@@ -732,7 +732,7 @@ const DEFAULT_SETTINGS = {
         "LINEN TƠ MÀU",
         "LINEN ƯỚT",
         "LINEN BỐ SỚ XÉO",
-        "LINEN TẰM GÂN THÊU",
+        "LINEN TẰM GÂN",
         "Khác"
     ],
     wholesaleCareStatuses: {}
@@ -1269,6 +1269,7 @@ function normalizeCategoryName(value) {
     if (key === "chan vay" || key === "chanvay") return "Chân váy";
     if (key === "dam") return "Đầm";
     if (key === "khac") return "Khác";
+    if (key === "linen tam gan theu" || key === "linen tam gan") return "LINEN TẰM GÂN";
 
     return category;
 
@@ -1932,13 +1933,13 @@ function getRequestedCategory(req) {
 
 function getProductCategory(product) {
 
-    return normalizeTextValue(product?.category, "Khác");
+    return normalizeCategoryName(normalizeTextValue(product?.category, "Khác"));
 
 }
 
 function normalizeCategoryLabel(value) {
 
-    return normalizeTextValue(value, "").replace(/\s+/g, " ").trim();
+    return normalizeCategoryName(normalizeTextValue(value, "").replace(/\s+/g, " ").trim());
 
 }
 
@@ -2257,6 +2258,17 @@ function loadPersistedState() {
 }
 
 loadPersistedState();
+products.forEach((product) => { product.category = getProductCategory(product); });
+cart.forEach((item) => { item.category = normalizeCategoryName(item.category); });
+orders.forEach((order) => {
+    if (order.category) order.category = normalizeCategoryName(order.category);
+    if (Array.isArray(order.items)) {
+        order.items.forEach((item) => {
+            if (item.category) item.category = normalizeCategoryName(item.category);
+        });
+    }
+});
+appSettings.productCategories = normalizeCategoryList(appSettings.productCategories);
 normalizeProductOrder();
 const legacyQuickCheckoutRepair = repairLegacyQuickCheckoutOrderTotals();
 if (legacyQuickCheckoutRepair.fixedCount > 0) {
