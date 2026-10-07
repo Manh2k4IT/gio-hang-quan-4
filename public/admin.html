@@ -7,7 +7,7 @@
 
     <title>Quản lí đơn hàng kho vải quận 4</title>
 
-    <link rel="stylesheet" href="css/admin.css?v=20261007k">
+    <link rel="stylesheet" href="css/admin.css?v=20261007m">
     <style>
         .brand-title {
             display: flex;
@@ -174,11 +174,8 @@
                 <!-- Toolbar -->
 
                 <section class="card purchase-limit-panel">
-                    <h2>Giới hạn mua 1 khúc theo số điện thoại</h2>
-                    <p>Chỉ áp dụng cho vải khúc đã chọn. Mỗi số điện thoại chỉ được mua 1 khúc cho mỗi mã và không được đặt lại mã đó trong đợt bật; vẫn mua được mã khác. Tắt rồi bật lại bắt đầu một đợt mới.</p>
+                    <h2>Giới hạn mua 1 khúc</h2>
                     <p id="purchase-limit-status" role="status" aria-live="polite">Đang tải cấu hình...</p>
-                    <p>Chọn ô “Áp dụng giới hạn” ngay trong danh sách sản phẩm bên dưới. Lựa chọn tự lưu; khi đang bật, thay đổi áp dụng ngay.</p>
-                    <p class="purchase-limit-note">Lưu ý: Giới hạn mua theo số điện thoại chỉ có tác dụng cho vải khúc</p>
                     <div class="purchase-limit-actions">
                         <button type="button" id="purchase-limit-select-all" class="brand-logo-btn" disabled onclick="selectAllPurchaseLimitProducts()">Chọn tất cả</button>
                         <button type="button" id="purchase-limit-toggle" class="btn-add" role="switch" aria-checked="false" disabled onclick="savePurchaseLimit(true)">Bật giới hạn</button>
@@ -186,6 +183,11 @@
                 </section>
 
                 <section class="card toolbar">
+                    <div class="product-stock-filter" role="group" aria-label="Lọc theo tồn kho">
+                        <button type="button" data-stock-filter="available" aria-pressed="true" onclick="setProductStockFilter('available')">Còn hàng</button>
+                        <button type="button" data-stock-filter="empty" aria-pressed="false" onclick="setProductStockFilter('empty')">Hết hàng</button>
+                        <button type="button" data-stock-filter="all" aria-pressed="false" onclick="setProductStockFilter('all')">Tất cả</button>
+                    </div>
 
                     <input
 
@@ -731,7 +733,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
-<script src="js/admin.js?v=20261007j"></script>
+<script src="js/admin.js?v=20261007m"></script>
 
 </body>
 

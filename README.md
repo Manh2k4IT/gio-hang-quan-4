@@ -114,6 +114,7 @@ Luu y quan trong:
 ## Vai khuc va vai ban theo met
 
 Cot **Ton kho** trong danh sach san pham chi hien so lon, khong nhap/cap nhat truc tiep. De sua ton kho, dung form sua san pham va so met ton theo tung mau.
+Bo loc **Con hang / Het hang / Tat ca** mac dinh chon **Con hang** (ton kho > 0, gom ca sap het). Ket hop voi danh muc, tu khoa va phan trang; **Chon tat ca** chi ap dung cho vai khuc trong bo loc hien tai. Chon **Tat ca** va xoa tu khoa truoc khi keo sap xep san pham.
 
 Trong form them/sua san pham, bat **San pham nay la vai khuc, ban theo khuc co dinh** de ban theo khuc. Nhan **Vai khuc** chi hien trong danh sach quan tri, khong hien tren danh sach san pham trang khach.
 
@@ -129,6 +130,8 @@ Kiem tra ca che do vai, thong ke va gioi han mua: `npm run test:fabric`.
 
 Trong muc **San pham**, danh dau cot **Ap dung gioi han** cho vai khuc ngay trong bang san pham va bam **Bat gioi han**. Vai ban theo met khong chon duoc va khong bi gioi han. Moi lan tich/bo tich tu luu; khi dang bat thi ap dung ngay. Trong khi luu, tam khoa cac lua chon de tranh ghi de. Neu luu that bai, thong bao loi va khoi phuc lua chon da luu truoc do.
 Cot **Trang thai** hien **Dang bat gioi han** cho vai khuc dang duoc ap dung. Nhan cap nhat theo cau hinh da luu; tat gioi han hoac bo chon san pham se an nhan, khong thay doi trang thai ton kho.
+Bang dieu khien gioi han chi hien so san pham da chon (mau do), khong hien chu thich hay thoi gian bat; trang thai bat/tat van the hien qua nut dieu khien.
+Trang khach hien **Gia uu dai ap dung 1 lan mua tren moi khach.** mau do, rung nhe tren san pham/gio hang/dat nhanh chi khi ma dang ap dung gioi han. Tu an khi tat gioi han; khong chay hieu ung neu thiet bi chon giam chuyen dong.
 Nut **Bat gioi han** mo va khong bam duoc khi chua chon san pham; sang len sau khi chon it nhat mot san pham va luu thanh cong. Khi dang bat, nut **Tat gioi han** van dung duoc ke ca bo chon het.
 Nut **Chon tat ca** chi chon vai khuc theo danh muc/tu khoa dang loc, ke ca cac trang tiep theo; khi tat ca da chon, nut doi thanh **Bo chon tat ca**, bam lan nua se bo chon trong bo loc. Giu nguyen cac lua chon ngoai bo loc va tu luu.
 Bo chon tat ca khi dang bat giu nguyen dot va lich su, tam khong gioi han san pham nao; chon lai san pham se ap dung lich su cua dot hien tai. Muon reset dot, tat roi bat lai. Khi tai cau hinh that bai, hien loi va can F5 de thu lai.

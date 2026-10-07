@@ -1885,8 +1885,28 @@ let purchaseLimitSettings = null;
 let purchaseLimitBusy = false;
 let purchaseLimitSelectedIds = new Set();
 
+let productStockFilter = "available";
+
+function setProductStockFilter(filter) {
+  if (!["available", "empty", "all"].includes(filter)) {
+    showToast("Bộ lọc tồn kho không hợp lệ");
+    return;
+  }
+  productStockFilter = filter;
+  paginationState.products = 1;
+  document.querySelectorAll("[data-stock-filter]").forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.stockFilter === filter));
+  });
+  load();
+}
+window.setProductStockFilter = setProductStockFilter;
+
 function filterAdminProducts(products, search) {
-  return products.filter((product) => `${product.name || ""} ${product.sku || ""}`.toLowerCase().includes(search));
+  return products.filter((product) => {
+    const matchesStock = productStockFilter === "all"
+      || (productStockFilter === "available" ? Number(product.stock) > 0 : Number(product.stock) <= 0);
+    return matchesStock && `${product.name || ""} ${product.sku || ""}`.toLowerCase().includes(search);
+  });
 }
 
 function selectAllPurchaseLimitProducts() {
@@ -1954,13 +1974,7 @@ function renderPurchaseLimitStatus() {
   const selectedCount = document.createElement("strong");
   selectedCount.className = "purchase-limit-selected-count";
   selectedCount.textContent = `${purchaseLimitSettings.productIds.length} sản phẩm đã chọn`;
-  status.replaceChildren(
-    document.createTextNode(purchaseLimitSettings.enabled ? "Đang bật • " : "Đang tắt • "),
-    selectedCount,
-    document.createTextNode(purchaseLimitSettings.enabled
-      ? ` • Đợt bắt đầu ${new Date(purchaseLimitSettings.startedAt).toLocaleString("vi-VN")}`
-      : " • Khách có thể mua nhiều lần.")
-  );
+  status.replaceChildren(selectedCount);
 }
 
 async function loadPurchaseLimitSettings() {
@@ -2530,8 +2544,8 @@ function setupProductDragAndDrop() {
     dragClass: "drag-dragging",
     onEnd: async () => {
       const searchValue = (document.getElementById("search")?.value || "").trim();
-      if (searchValue) {
-        showToast("Hãy xóa từ khóa tìm kiếm trước khi sắp xếp");
+      if (searchValue || productStockFilter !== "all") {
+        showToast("Hãy chọn Tất cả và xóa từ khóa tìm kiếm trước khi sắp xếp");
         await refreshDashboard();
         return;
       }
