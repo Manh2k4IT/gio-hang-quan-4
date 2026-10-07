@@ -313,13 +313,12 @@ app.use((req, res, next) => {
         && !/prefetch|prerender/i.test(String(req.headers["purpose"] || req.headers["sec-purpose"] || ""))) {
         res.on("finish", () => {
             if (res.statusCode !== 200 || !String(res.getHeader("Content-Type") || "").includes("text/html")) return;
-            recordTrafficVisit(trafficAnalytics, req.sessionId);
             const productId = Number(req.query.productId);
             const product = Number.isSafeInteger(productId) && productId > 0 ? findProductById(productId) : null;
             if (product && !isHiddenInTotal(product)) {
                 recordProductClick(trafficAnalytics, product);
+                schedulePersistState();
             }
-            schedulePersistState();
         });
     }
     next();
@@ -2387,6 +2386,28 @@ app.get("/products/all", (req, res) => {
 
     res.json(productsToSend);
 
+});
+
+app.post("/traffic/visit", writeLimiter, (req, res) => {
+    const { page, navigationType, fromShop } = req.body || {};
+    if (typeof page !== "string" || !page.startsWith("/shop.html")
+        || !["navigate", "reload", "back_forward"].includes(navigationType)
+        || typeof fromShop !== "boolean") {
+        return res.status(400).json({ error: "Thông tin lượt truy cập không hợp lệ", requestId: req.requestId });
+    }
+    const url = new URL(page, "http://localhost");
+    const excluded = url.pathname !== "/shop.html"
+        || url.searchParams.has("productId")
+        || url.searchParams.get("view") === "cart"
+        || navigationType === "back_forward"
+        || (navigationType !== "reload" && fromShop)
+        || /bot|crawler|spider|facebookexternalhit|preview/i.test(String(req.headers["user-agent"] || ""))
+        || /prefetch|prerender/i.test(String(req.headers["purpose"] || req.headers["sec-purpose"] || ""));
+    if (!excluded) {
+        recordTrafficVisit(trafficAnalytics, req.sessionId);
+        schedulePersistState();
+    }
+    res.json({ counted: !excluded });
 });
 
 app.get("/traffic-insights", (req, res) => {

@@ -106,7 +106,7 @@ Click anh/ten san pham mo `/shop.html?productId=...`. Moi lan tai thanh cong tra
 Don phat sinh dem so don hien co theo `createdAt` trong khoang ngay da chon, theo gio Viet Nam, bat ke trang thai va danh muc. Don gop chi tinh mot don; don da xoa khong duoc tinh. Thay doi trang thai khong doi ngay tinh don. API tra them `totalOrders`.
 Don cu thieu ngay tao hop le khong the loc theo ngay: API tra `undatedOrders` va giao dien hien canh bao, khong tu gan ngay tao.
 
-- Dem moi lan GET `/shop.html` thanh cong la mot luot xem (bao gom tai lai trang).
+- Luot xem cua hang ghi qua `POST /traffic/visit` khi mo trang shop tu ben ngoai hoac tai lai trang chinh. Khong tinh trang san pham (`productId`), gio hang, Back/Forward hay dieu huong noi bo tu shop (bao gom quay ra tu san pham). Tai lai trang chinh van tinh mot luot; tai lai trang san pham chi tinh click san pham. So lieu cu da luu khong tu tru lai vi khong co lich su dieu huong de phan biet.
 - Khong dem trang quan tri, request API, prefetch va bot nhan dien duoc qua User-Agent.
 - Trinh duyet rieng biet duoc nhan dien bang cookie gio hang; xoa cookie/doi trinh duyet se duoc tinh moi. Khong dong nghia voi so nguoi thuc te.
 - Ngay thong ke theo mui gio `Asia/Ho_Chi_Minh`. Du lieu bat dau tu khi tinh nang duoc bat, khong khoi phuc lich su truoc do.

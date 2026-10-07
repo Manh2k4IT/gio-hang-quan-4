@@ -184,6 +184,15 @@ test("HTTP tracking excludes admin/API/bots/prefetch and persists after restart"
         const res = await fetch(`${origin}${url}`, { method, headers });
         await res.text();
         assert.equal(res.status, 200);
+        if (method === "GET" && (url.startsWith("/shop.html") || url === "/")) {
+            const cookie = headers.cookie || res.headers.get("set-cookie")?.split(";")[0];
+            const tracking = await fetch(`${origin}/traffic/visit`, {
+                method: "POST",
+                headers: { ...headers, cookie, "Content-Type": "application/json" },
+                body: JSON.stringify({ page: url === "/" ? "/shop.html" : url, navigationType: "navigate", fromShop: false })
+            });
+            assert.equal(tracking.status, 200);
+        }
         return res;
     }
     await start();
@@ -207,27 +216,53 @@ test("HTTP tracking excludes admin/API/bots/prefetch and persists after restart"
     await visit("/shop.html", { "user-agent": "Googlebot" });
     await visit("/shop.html", { "sec-purpose": "prefetch" });
     await visit("/");
-    const expected = await insights();
-    assert.equal(expected.totalViews, 5);
+    let expected = await insights();
+    assert.equal(expected.totalViews, 4);
     assert.equal(expected.uniqueVisitors, 3);
     assert.deepEqual(expected.topProductClicks.map((product) => [product.productId, product.clicks]), [[1, 1]]);
     await visit("/shop.html?productId=999999");
     await visit("/shop.html?productId=1", { "user-agent": "Googlebot" });
     await visit("/shop.html?productId=1", { "sec-purpose": "prefetch" });
     assert.deepEqual((await insights()).topProductClicks, expected.topProductClicks);
-    expected.totalViews += 1;
-    expected.todayViews += 1;
-    expected.uniqueVisitors += 1;
-    expected.averageDailyViews = Number((expected.totalViews / 7).toFixed(1));
-    expected.daily[expected.daily.length - 1].views += 1;
-    expected.daily[expected.daily.length - 1].visitors += 1;
+    assert.equal((await insights()).totalViews, expected.totalViews);
+    for (const visitData of [
+        { page: "/shop.html?productId=1", navigationType: "navigate", fromShop: true },
+        { page: "/shop.html", navigationType: "navigate", fromShop: true },
+        { page: "/shop.html", navigationType: "back_forward", fromShop: false },
+        { page: "/shop.html?view=cart", navigationType: "navigate", fromShop: false },
+        { page: "/shop.html?productId=1", navigationType: "reload", fromShop: true }
+    ]) {
+        const res = await fetch(`${origin}/traffic/visit`, {
+            method: "POST",
+            headers: { cookie, "Content-Type": "application/json" },
+            body: JSON.stringify(visitData)
+        });
+        assert.equal(res.status, 200);
+        assert.equal((await res.json()).counted, false);
+    }
+    assert.deepEqual(await insights(), expected);
+    const reload = await fetch(`${origin}/traffic/visit`, {
+        method: "POST",
+        headers: { cookie, "Content-Type": "application/json" },
+        body: JSON.stringify({ page: "/shop.html", navigationType: "reload", fromShop: true })
+    });
+    assert.equal(reload.status, 200);
+    assert.equal((await reload.json()).counted, true);
+    const reloadedInsights = await insights();
+    assert.equal(reloadedInsights.totalViews, expected.totalViews + 1);
+    assert.equal(reloadedInsights.uniqueVisitors, expected.uniqueVisitors);
+    expected = reloadedInsights;
+    const invalidVisit = await fetch(`${origin}/traffic/visit`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({})
+    });
+    assert.equal(invalidVisit.status, 400);
     assert.equal((await fetch(`${origin}/traffic-insights?days=8`)).status, 400);
     const rangeRes = await fetch(`${origin}/traffic-insights?startDate=${expected.today}&endDate=${expected.today}`);
     assert.equal(rangeRes.status, 200);
     const rangeData = await rangeRes.json();
     assert.equal(rangeData.days, 1);
-    assert.equal(rangeData.totalViews, 6);
-    assert.equal(rangeData.uniqueVisitors, 4);
+    assert.equal(rangeData.totalViews, 5);
+    assert.equal(rangeData.uniqueVisitors, 3);
     assert.equal(rangeData.daily.length, 1);
     for (const query of [
         `startDate=${expected.today}`,
@@ -241,7 +276,7 @@ test("HTTP tracking excludes admin/API/bots/prefetch and persists after restart"
     }
     for (let attempt = 0; attempt < 100; attempt += 1) {
         const saved = JSON.parse(await fs.readFile(path.join(testDir, "data", "state.json"), "utf8"));
-        if (saved.trafficAnalytics && getTrafficInsights(saved.trafficAnalytics, 7).totalViews === 6) break;
+        if (saved.trafficAnalytics && getTrafficInsights(saved.trafficAnalytics, 7).totalViews === 5) break;
         if (attempt === 99) assert.fail("Traffic was not saved");
         await delay(50);
     }
