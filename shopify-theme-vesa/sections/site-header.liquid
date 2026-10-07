@@ -1,0 +1,121 @@
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="{{ routes.root_url }}">
+      <span class="brand-mark">{{ shop.name | slice: 0, 1 }}</span>
+      <span>{{ shop.name }}</span>
+    </a>
+
+    <nav class="main-nav mega-nav" aria-label="Main navigation">
+      <a class="menu-btn menu-btn-home" href="{{ routes.root_url }}">Trang chủ</a>
+
+      <details class="menu-group">
+        <summary class="menu-btn">Khởi nghiệp</summary>
+        <div class="menu-panel" role="menu">
+          <p class="menu-panel-title">KHỞI NGHIỆP</p>
+          <a class="menu-item" href="#">Mở shop thời trang</a>
+          <a class="menu-item" href="#">Mở cửa hàng vải</a>
+          <a class="menu-item" href="#">Xây dựng Brand</a>
+          <a class="menu-item" href="#">Chọn nguồn hàng</a>
+          <a class="menu-item" href="#">Checklist khởi nghiệp</a>
+          <a class="menu-item" href="#">Ebook miễn phí</a>
+          <a class="menu-item" href="#">Video hướng dẫn</a>
+          <a class="menu-item" href="#">Đăng ký tư vấn</a>
+        </div>
+      </details>
+
+      <details class="menu-group">
+        <summary class="menu-btn">Kiến thức</summary>
+        <div class="menu-panel" role="menu">
+          <p class="menu-panel-title">KIẾN THỨC</p>
+          <a class="menu-item" href="#">Kiến thức vải</a>
+          <a class="menu-item" href="#">Kiến thức thời trang</a>
+          <a class="menu-item" href="#">Bí quyết bán hàng</a>
+          <a class="menu-item" href="#">Xu hướng thị trường</a>
+          <a class="menu-item" href="#">Kinh nghiệm nhập hàng</a>
+          <a class="menu-item" href="#">Video</a>
+          <a class="menu-item" href="#">Blog</a>
+          <a class="menu-item" href="#">Tài liệu</a>
+        </div>
+      </details>
+
+      <details class="menu-group">
+        <summary class="menu-btn">Dự án khách hàng</summary>
+        <div class="menu-panel" role="menu">
+          <p class="menu-panel-title">KHÁCH TÌM</p>
+          <a class="menu-item" href="#">Shop thời trang</a>
+          <a class="menu-item" href="#">Cửa hàng vải</a>
+          <a class="menu-item" href="#">Brand</a>
+          <a class="menu-item" href="#">BST nổi bật</a>
+          <a class="menu-item" href="#">Khách hàng tiêu biểu</a>
+          <a class="menu-item" href="#">Câu chuyện thành công</a>
+        </div>
+      </details>
+
+      <details class="menu-group">
+        <summary class="menu-btn">Giới thiệu</summary>
+        <div class="menu-panel" role="menu">
+          <p class="menu-panel-title">GIỚI THIỆU</p>
+          <a class="menu-item" href="#">Câu chuyện GUSA</a>
+          <a class="menu-item" href="#">Tầm nhìn</a>
+          <a class="menu-item" href="#">Giá trị cốt lõi</a>
+          <a class="menu-item" href="#">Hệ sinh thái</a>
+          <a class="menu-item" href="#">Kho vải</a>
+          <a class="menu-item" href="#">Đội ngũ</a>
+          <a class="menu-item" href="#">Tuyển dụng</a>
+        </div>
+      </details>
+
+      <details class="menu-group">
+        <summary class="menu-btn">Liên hệ</summary>
+        <div class="menu-panel" role="menu">
+          <p class="menu-panel-title">LIÊN HỆ</p>
+          <a class="menu-item" href="#">Nhận báo giá</a>
+          <a class="menu-item" href="#">Đăng ký tư vấn</a>
+          <a class="menu-item" href="#">Đặt lịch tham quan kho</a>
+          <a class="menu-item" href="#">Bản đồ</a>
+          <a class="menu-item" href="#">Thông tin liên hệ</a>
+        </div>
+      </details>
+    </nav>
+
+    <a class="btn btn-outline header-cta" href="/pages/contact">Nhận báo giá</a>
+  </div>
+</header>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var groups = Array.prototype.slice.call(document.querySelectorAll('.menu-group'));
+
+    groups.forEach(function (group) {
+      group.addEventListener('toggle', function () {
+        if (!group.open) return;
+        groups.forEach(function (other) {
+          if (other !== group) other.removeAttribute('open');
+        });
+      });
+    });
+
+    document.addEventListener('click', function (event) {
+      if (!event.target.closest('.mega-nav')) {
+        groups.forEach(function (group) {
+          group.removeAttribute('open');
+        });
+      }
+    });
+
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        groups.forEach(function (group) {
+          group.removeAttribute('open');
+        });
+      }
+    });
+  });
+</script>
+
+{% schema %}
+{
+  "name": "Site Header",
+  "settings": []
+}
+{% endschema %}

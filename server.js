@@ -8,6 +8,7 @@ const { rateLimit } = require("express-rate-limit");
 const path = require("path");
 const fs = require("fs");
 const crypto = require("crypto");
+const { createTrafficState, restoreTrafficState, recordTrafficVisit, recordProductClick, getTrafficInsights } = require("./traffic-analytics");
 let sharp = null;
 
 try {
@@ -305,6 +306,24 @@ function injectShareMetaToShopHtml(template, meta) {
 
     return `${template.slice(0, headCloseIndex)}\n${ogBlock}\n${template.slice(headCloseIndex)}`;
 }
+
+app.use((req, res, next) => {
+    if (req.method === "GET" && req.path === "/shop.html"
+        && !/bot|crawler|spider|facebookexternalhit|preview/i.test(String(req.headers["user-agent"] || ""))
+        && !/prefetch|prerender/i.test(String(req.headers["purpose"] || req.headers["sec-purpose"] || ""))) {
+        res.on("finish", () => {
+            if (res.statusCode !== 200 || !String(res.getHeader("Content-Type") || "").includes("text/html")) return;
+            recordTrafficVisit(trafficAnalytics, req.sessionId);
+            const productId = Number(req.query.productId);
+            const product = Number.isSafeInteger(productId) && productId > 0 ? findProductById(productId) : null;
+            if (product && !isHiddenInTotal(product)) {
+                recordProductClick(trafficAnalytics, product);
+            }
+            schedulePersistState();
+        });
+    }
+    next();
+});
 
 app.get("/shop.html", (req, res, next) => {
     const productId = Number(req.query?.productId);
@@ -913,6 +932,7 @@ let cart = [];
 let orders = cloneData(DEFAULT_ORDERS);
 
 let appSettings = cloneData(DEFAULT_SETTINGS);
+let trafficAnalytics = createTrafficState();
 
 let dataRevision = 0;
 let persistTimer = null;
@@ -2125,6 +2145,7 @@ async function writeStateFileOnce() {
         products,
         cart,
         orders,
+        trafficAnalytics,
             settings: appSettings,
         dataRevision
     };
@@ -2217,6 +2238,13 @@ function loadPersistedState() {
 
         const revision = Number(parsed.dataRevision);
         dataRevision = Number.isFinite(revision) && revision >= 0 ? Math.floor(revision) : 0;
+        try {
+            trafficAnalytics = restoreTrafficState(parsed.trafficAnalytics);
+        } catch (error) {
+            recordServerError(error);
+            console.error("Không thể đọc thống kê truy cập:", error.message);
+            trafficAnalytics = createTrafficState();
+        }
     } catch (error) {
         console.error("Không thể đọc dữ liệu state, dùng dữ liệu mặc định:", error.message);
         products = cloneData(DEFAULT_PRODUCTS);
@@ -2347,6 +2375,24 @@ app.get("/products/all", (req, res) => {
 
     res.json(productsToSend);
 
+});
+
+app.get("/traffic-insights", (req, res) => {
+    const hasDateRange = req.query.startDate !== undefined || req.query.endDate !== undefined;
+    const range = hasDateRange
+        ? { startDate: req.query.startDate, endDate: req.query.endDate }
+        : (req.query.days === undefined ? 7 : Number(req.query.days));
+    if (!hasDateRange && ![7, 30, 90].includes(range)) {
+        return res.status(400).json({ error: "Khoảng thời gian phải là 7, 30 hoặc 90 ngày", requestId: req.requestId });
+    }
+    try {
+        const insights = getTrafficInsights(trafficAnalytics, range, new Date(), orders);
+        setNoCacheHeaders(res);
+        res.json(insights);
+    } catch (error) {
+        if (!(error instanceof RangeError)) throw error;
+        return res.status(400).json({ error: error.message, requestId: req.requestId });
+    }
 });
 
 app.get("/health", (req, res) => {

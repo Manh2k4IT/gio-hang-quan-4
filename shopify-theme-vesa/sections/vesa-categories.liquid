@@ -1,0 +1,25 @@
+<section class="categories" id="categories">
+  <div class="container">
+    <p class="eyebrow">Garment Focus</p>
+    <h2>{{ section.settings.title }}</h2>
+
+    <ul class="category-list" data-reveal>
+      <li>T-Shirts and Polo</li>
+      <li>Shirts and Blouses</li>
+      <li>Denim and Bottoms</li>
+      <li>Activewear and Athleisure</li>
+      <li>Outerwear Essentials</li>
+      <li>Kidswear Collections</li>
+    </ul>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "VESA Categories",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Title", "default": "Commercial garment categories buyers can build around" }
+  ],
+  "presets": [{ "name": "VESA Categories" }]
+}
+{% endschema %}

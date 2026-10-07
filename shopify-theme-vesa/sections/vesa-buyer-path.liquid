@@ -1,0 +1,22 @@
+<section id="buyer-path" class="section section-tinted">
+  <div class="container" data-reveal>
+    <p class="eyebrow">Buyer Conversion Path</p>
+    <h2>{{ section.settings.title }}</h2>
+    <div class="path-grid">
+      <article><span>01</span><h3>Share Requirement</h3><p>Category, quantity, FOB target, shipment month and country preference.</p></article>
+      <article><span>02</span><h3>Capability Check</h3><p>Country route, MOQ fit, lead time, compliance route and supplier direction.</p></article>
+      <article><span>03</span><h3>Costing & Sampling</h3><p>Fabric direction, trims, technical review and sample coordination.</p></article>
+      <article><span>04</span><h3>Production Visibility</h3><p>T&A tracking, quality checkpoints and shipment readiness communication.</p></article>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "VESA Buyer Path",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Title", "default": "From enquiry to production decision, without confusion" }
+  ],
+  "presets": [{ "name": "VESA Buyer Path" }]
+}
+{% endschema %}

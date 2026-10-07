@@ -1,0 +1,28 @@
+<section class="countries" id="countries">
+  <div class="container">
+    <p class="eyebrow">Sourcing Platforms</p>
+    <h2>{{ section.settings.title }}</h2>
+
+    <div class="country-grid">
+      <article class="country-card" data-reveal>
+        <h3>Bangladesh</h3>
+        <p>Knitwear and volume-driven programs with disciplined lead-time tracking.</p>
+      </article>
+
+      <article class="country-card" data-reveal>
+        <h3>India</h3>
+        <p>Woven categories, wash expertise and flexible development for brand growth.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "VESA Countries",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Title", "default": "Two-country sourcing strength. One buyer-facing system" }
+  ],
+  "presets": [{ "name": "VESA Countries" }]
+}
+{% endschema %}

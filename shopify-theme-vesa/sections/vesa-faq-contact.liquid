@@ -1,0 +1,37 @@
+<section class="faq-contact" id="faq-contact">
+  <div class="container faq-grid">
+    <div>
+      <p class="eyebrow">FAQ</p>
+      <h2>{{ section.settings.title }}</h2>
+      <details class="faq-item" open>
+        <summary>Can you support low-MOQ development?</summary>
+        <p>Yes. We support pilot runs first, then scale based on sell-through and margin targets.</p>
+      </details>
+      <details class="faq-item">
+        <summary>How do you control timeline risk?</summary>
+        <p>We use milestone-based tracking and buyer-side updates from sample to shipment booking.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Do you work with new brands?</summary>
+        <p>Yes. We have startup-friendly onboarding and clear sourcing roadmaps for first-time buyers.</p>
+      </details>
+    </div>
+
+    <aside class="contact-card" data-reveal>
+      <h3>{{ section.settings.contact_title }}</h3>
+      <p>Share target market, category and timeline. We will map options and next steps within 24 hours.</p>
+      <a class="btn btn-solid" href="/pages/contact">Contact Team</a>
+    </aside>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "VESA FAQ Contact",
+  "settings": [
+    { "type": "text", "id": "title", "label": "FAQ title", "default": "Questions buyers usually ask before they reach out" },
+    { "type": "text", "id": "contact_title", "label": "Contact card title", "default": "Let's build your next garment sourcing program" }
+  ],
+  "presets": [{ "name": "VESA FAQ Contact" }]
+}
+{% endschema %}

@@ -1,0 +1,46 @@
+<section class="hero">
+  <div class="container hero-grid">
+    <div data-reveal>
+      <p class="eyebrow">{{ section.settings.eyebrow }}</p>
+      <h1>{{ section.settings.headline }}</h1>
+      <p class="lead">{{ section.settings.subheadline }}</p>
+
+      <div class="hero-actions">
+        <a class="btn btn-solid" href="{{ section.settings.primary_cta_link }}">{{ section.settings.primary_cta_label }}</a>
+        <a class="btn btn-outline" href="{{ section.settings.secondary_cta_link }}">{{ section.settings.secondary_cta_label }}</a>
+      </div>
+
+      <ul class="hero-pills">
+        <li>Garments only</li>
+        <li>Bangladesh + India</li>
+        <li>Buyer RFQ ready</li>
+      </ul>
+    </div>
+
+    <div class="hero-card" data-reveal>
+      <p>Production Visibility</p>
+      <h3>One accountable sourcing partner from design direction to delivery follow-up.</h3>
+      <div class="hero-kpis">
+        <div><strong>20+</strong><span>Years of sourcing experience</span></div>
+        <div><strong>2</strong><span>Core country platforms</span></div>
+        <div><strong>100%</strong><span>Buyer-side communication focus</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "VESA Hero",
+  "settings": [
+    { "type": "text", "id": "eyebrow", "label": "Eyebrow", "default": "Apparel Sourcing" },
+    { "type": "text", "id": "headline", "label": "Headline", "default": "Built on Experience. Powered by Intelligence." },
+    { "type": "textarea", "id": "subheadline", "label": "Subheadline", "default": "A buyer-first sourcing system designed for clarity, execution discipline and faster decisions." },
+    { "type": "text", "id": "primary_cta_label", "label": "Primary CTA label", "default": "Start Sourcing Discussion" },
+    { "type": "url", "id": "primary_cta_link", "label": "Primary CTA link" },
+    { "type": "text", "id": "secondary_cta_label", "label": "Secondary CTA label", "default": "View Buyer Path" },
+    { "type": "url", "id": "secondary_cta_link", "label": "Secondary CTA link" }
+  ],
+  "presets": [{ "name": "VESA Hero" }]
+}
+{% endschema %}

@@ -1,0 +1,232 @@
+:root {
+  --ink-900: #11263a;
+  --ink-800: #1e3851;
+  --ink-700: #345776;
+  --surface: #ffffff;
+  --surface-soft: #f4f8fb;
+  --line: #d7e3ee;
+  --brand: #09539f;
+  --brand-strong: #0a3f73;
+  --shadow-soft: 0 16px 30px rgba(20, 56, 96, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  color: var(--ink-900);
+  background: linear-gradient(160deg, #f7fbff 0%, #ffffff 42%, #eef6fb 100%);
+  font-family: "Be Vietnam Pro", "Nunito Sans", "Segoe UI", sans-serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.container {
+  width: min(1200px, 92vw);
+  margin: 0 auto;
+}
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(8px);
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.8rem 0;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-weight: 700;
+  color: var(--ink-900);
+  letter-spacing: 0.01em;
+}
+
+.brand-mark {
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: radial-gradient(circle at 30% 30%, #54adff, #0b4d8a 65%);
+  color: #ffffff;
+  box-shadow: 0 8px 16px rgba(11, 77, 138, 0.28);
+}
+
+.main-nav {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.menu-group {
+  position: relative;
+}
+
+.menu-group > summary {
+  list-style: none;
+}
+
+.menu-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.menu-btn {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 0.42rem 0.92rem;
+  font-size: 0.92rem;
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--ink-800);
+  cursor: pointer;
+  transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.menu-btn:hover,
+.menu-group[open] > .menu-btn,
+.menu-btn-home {
+  border-color: #b8d0e5;
+  background: linear-gradient(180deg, #ffffff 0%, #edf6ff 100%);
+  box-shadow: 0 6px 16px rgba(16, 56, 95, 0.1);
+}
+
+.menu-btn:hover,
+.menu-group[open] > .menu-btn {
+  transform: translateY(-1px);
+}
+
+.menu-panel {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  left: 0;
+  min-width: 260px;
+  display: grid;
+  gap: 0.18rem;
+  padding: 0.85rem;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.menu-group:hover .menu-panel,
+.menu-group:focus-within .menu-panel,
+.menu-group[open] .menu-panel {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.menu-panel-title {
+  margin: 0 0 0.3rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  font-weight: 800;
+  color: var(--brand-strong);
+}
+
+.menu-item {
+  border-radius: 10px;
+  padding: 0.42rem 0.52rem;
+  color: var(--ink-700);
+  font-size: 0.9rem;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.menu-item:hover {
+  background: var(--surface-soft);
+  color: var(--brand-strong);
+}
+
+.btn {
+  border-radius: 999px;
+  padding: 0.5rem 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.btn-outline {
+  border: 1px solid var(--ink-900);
+}
+
+.header-cta {
+  background: linear-gradient(130deg, #0f4d89, #0d78be);
+  border: none;
+  color: #ffffff;
+  box-shadow: 0 10px 18px rgba(15, 77, 137, 0.22);
+}
+
+@media (max-width: 1024px) {
+  .header-inner {
+    flex-wrap: wrap;
+    row-gap: 0.7rem;
+  }
+
+  .main-nav {
+    width: 100%;
+    order: 3;
+    overflow-x: auto;
+    white-space: nowrap;
+    padding-bottom: 0.18rem;
+  }
+
+  .menu-group {
+    position: static;
+  }
+
+  .menu-panel {
+    position: static;
+    margin-top: 0.45rem;
+    width: min(420px, 100%);
+    min-width: 0;
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+    display: none;
+  }
+
+  .menu-group[open] .menu-panel {
+    display: grid;
+  }
+
+  .header-cta {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .menu-btn {
+    font-size: 0.86rem;
+    padding: 0.4rem 0.82rem;
+  }
+
+  .brand {
+    font-size: 0.92rem;
+  }
+}

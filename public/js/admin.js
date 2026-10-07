@@ -1529,7 +1529,127 @@ function previewImage() {
   reader.readAsDataURL(file);
 }
 
+let trafficInsightsRequest = 0;
+let trafficDateFilterInitialized = false;
+
+function initializeTrafficDateFilter() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Ho_Chi_Minh", year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(new Date());
+  const part = (type) => parts.find((item) => item.type === type).value;
+  const today = `${part("year")}-${part("month")}-${part("day")}`;
+  const shiftDate = (offset) => new Date(Date.parse(`${today}T00:00:00Z`) + offset * 86400000).toISOString().slice(0, 10);
+  const start = document.getElementById("traffic-insights-start");
+  const end = document.getElementById("traffic-insights-end");
+  [start, end].forEach((input) => {
+    input.min = shiftDate(-89);
+    input.max = today;
+  });
+  if (!trafficDateFilterInitialized) {
+    start.value = shiftDate(-6);
+    end.value = today;
+    trafficDateFilterInitialized = true;
+  }
+}
+
+async function loadTrafficInsights() {
+  const request = ++trafficInsightsRequest;
+  const status = document.getElementById("traffic-insights-status");
+  initializeTrafficDateFilter();
+  const start = document.getElementById("traffic-insights-start");
+  const end = document.getElementById("traffic-insights-end");
+  end.setCustomValidity(start.value > end.value ? "Ngày kết thúc phải bằng hoặc sau ngày bắt đầu" : "");
+  if (!document.getElementById("traffic-insights-filter").reportValidity()) {
+    status.hidden = false;
+    status.textContent = "Vui lòng chọn khoảng ngày hợp lệ trong 90 ngày gần nhất; ngày bắt đầu không được sau ngày kết thúc.";
+    return;
+  }
+  const startDate = start.value;
+  const endDate = end.value;
+  const days = (Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86400000 + 1;
+  status.textContent = "Đang tải thống kê...";
+  status.hidden = false;
+  const totalViews = document.getElementById("trafficTotalViews");
+  const totalOrders = document.getElementById("trafficTotalOrders");
+  totalViews.textContent = "—";
+  totalOrders.textContent = "—";
+  const productClicksList = document.getElementById("traffic-product-clicks-list");
+  productClicksList.replaceChildren();
+  try {
+    const query = new URLSearchParams({ startDate, endDate });
+    const res = await fetch(`${API}/traffic-insights?${query}`);
+    const { raw, data, requestId } = await readApiResponseSafely(res);
+    if (request !== trafficInsightsRequest) return;
+    if (!res.ok) {
+      throw new Error(getApiErrorMessage(res, raw, data, "Không thể tải thống kê truy cập", requestId));
+    }
+    if (!data || !Array.isArray(data.daily) || data.daily.length !== days
+      || data.startDate !== startDate || data.endDate !== endDate
+      || !Number.isSafeInteger(data.totalOrders) || data.totalOrders < 0
+      || !Number.isSafeInteger(data.undatedOrders) || data.undatedOrders < 0
+      || !Array.isArray(data.topProductClicks) || data.topProductClicks.length > 10
+      || data.topProductClicks.some((product) => !product
+        || !Number.isSafeInteger(product.productId) || product.productId < 1
+        || typeof product.name !== "string" || typeof product.sku !== "string"
+        || !Number.isSafeInteger(product.clicks) || product.clicks < 1)
+      || ![data.totalViews, data.uniqueVisitors, data.todayViews, data.averageDailyViews].every((value) => Number.isFinite(value) && value >= 0)
+      || !Number.isFinite(Date.parse(data.startedAt))
+      || data.daily.some((row) => !row || !/^\d{4}-\d{2}-\d{2}$/.test(row.date)
+        || !Number.isSafeInteger(row.views) || row.views < 0 || !Number.isSafeInteger(row.visitors) || row.visitors < 0)) {
+      throw new Error("Dữ liệu thống kê truy cập không hợp lệ");
+    }
+    const numbers = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 });
+    totalViews.textContent = numbers.format(data.totalViews);
+    totalOrders.textContent = numbers.format(data.totalOrders);
+    if (data.topProductClicks.length === 0) {
+      const row = document.createElement("tr");
+      const cell = document.createElement("td");
+      cell.colSpan = 4;
+      cell.textContent = "Chưa có lượt click sản phẩm trong khoảng thời gian này.";
+      row.appendChild(cell);
+      productClicksList.appendChild(row);
+    } else {
+      data.topProductClicks.forEach((product, index) => {
+        const row = document.createElement("tr");
+        [String(index + 1), product.sku || "—", product.name, numbers.format(product.clicks)].forEach((value) => {
+          const cell = document.createElement("td");
+          cell.textContent = value;
+          row.appendChild(cell);
+        });
+        productClicksList.appendChild(row);
+      });
+    }
+    status.textContent = data.undatedOrders > 0
+      ? `Có ${numbers.format(data.undatedOrders)} đơn thiếu ngày tạo hợp lệ, không được tính vào thống kê theo ngày.`
+      : "";
+    status.hidden = data.undatedOrders === 0;
+  } catch (error) {
+    if (request !== trafficInsightsRequest) return;
+    console.error("Không thể tải thống kê truy cập:", error);
+    status.hidden = false;
+    status.textContent = error.message || "Không thể tải thống kê truy cập";
+    showToast(status.textContent);
+  }
+}
+
+document.getElementById("traffic-insights-end").addEventListener("input", () => {
+  document.getElementById("traffic-insights-end").setCustomValidity("");
+});
+document.getElementById("traffic-insights-start").addEventListener("input", () => {
+  document.getElementById("traffic-insights-end").setCustomValidity("");
+});
+
 function switchTab(tabName) {
+  const targetButton = Array.from(document.querySelectorAll(".nav-btn")).find((btn) => btn.dataset.tab === tabName);
+  if (!targetButton || !document.getElementById(`${tabName}-view`)) {
+    tabName = "products";
+  }
+  const url = new URL(window.location.href);
+  url.hash = tabName;
+  if (url.href !== window.location.href) {
+    window.history.replaceState(window.history.state, "", url);
+  }
+
   document.querySelectorAll(".nav-btn").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.tab === tabName);
   });
@@ -1537,6 +1657,7 @@ function switchTab(tabName) {
   document.querySelectorAll(".view-panel").forEach((panel) => {
     panel.classList.toggle("active", panel.id === `${tabName}-view`);
   });
+  if (tabName === "traffic-insights") loadTrafficInsights();
 }
 
 async function load() {
@@ -2273,6 +2394,9 @@ document.querySelectorAll(".nav-btn").forEach((btn) => {
 });
 
 syncCategoryUi();
+
+window.addEventListener("hashchange", () => switchTab(window.location.hash.slice(1)));
+switchTab(window.location.hash.slice(1) || "products");
 
 loadBrandSettings();
 refreshDashboard();

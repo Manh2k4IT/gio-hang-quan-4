@@ -2341,10 +2341,12 @@
         return `
           <div class="product-card">
             <div class="product-image-wrap">
-              <img class="product-main-image" src="${getSelectedImageForProduct(p.id) || p.image || "https://placehold.co/300x220?text=No+Image"}" alt="${p.name}" loading="lazy" decoding="async" />
+              <a href="/shop.html?productId=${p.id}" aria-label="Xem sản phẩm">
+                <img class="product-main-image" src="${getSelectedImageForProduct(p.id) || p.image || "https://placehold.co/300x220?text=No+Image"}" alt="${p.name}" loading="lazy" decoding="async" />
+              </a>
               <button class="category-cart-btn" onclick="openCategoryPage('${productCategory.replace(/'/g, "\\'")}')">${productCategory}</button>
             </div>
-            <div class="product-name">${p.name}</div>
+            <div class="product-name"><a href="/shop.html?productId=${p.id}" style="color:inherit;text-decoration:none">${p.name}</a></div>
             <div class="product-meta product-sku">SKU: ${p.sku || "—"}</div>
             <div class="product-meta product-stock">Tồn kho: ${formatVariantStockDisplay(p, getPreferredInStockVariantIndex(p, Number(p.id)), Number(p.stock || 0))}</div>
             <div class="price-row">

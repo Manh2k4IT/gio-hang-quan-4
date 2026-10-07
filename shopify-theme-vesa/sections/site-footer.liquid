@@ -1,0 +1,31 @@
+<footer class="site-footer">
+  <div class="container footer-grid">
+    <div>
+      <h3>{{ shop.name }}</h3>
+      <p>{{ settings.brand_tagline }}</p>
+    </div>
+    <div>
+      <h4>Contact</h4>
+      <p>{{ shop.email }}</p>
+      <p>{{ shop.phone }}</p>
+    </div>
+    <div>
+      <h4>Links</h4>
+      <ul>
+        <li><a href="/pages/contact">Contact</a></li>
+        <li><a href="/pages/about">About</a></li>
+        <li><a href="/policies/privacy-policy">Privacy</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <small>&copy; {{ 'now' | date: '%Y' }} {{ shop.name }}. All rights reserved.</small>
+  </div>
+</footer>
+
+{% schema %}
+{
+  "name": "Site Footer",
+  "settings": []
+}
+{% endschema %}

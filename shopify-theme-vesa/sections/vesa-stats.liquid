@@ -1,0 +1,22 @@
+<section class="section">
+  <div class="container" data-reveal>
+    <p class="eyebrow">Why {{ shop.name }}</p>
+    <h2>{{ section.settings.title }}</h2>
+    <div class="stats-grid">
+      <article><strong>20+</strong><span>Years in apparel sourcing and merchandising execution.</span></article>
+      <article><strong>2</strong><span>Focused sourcing platforms for credible delivery.</span></article>
+      <article><strong>30+</strong><span>Buyer-safe category programs across men, ladies and kids.</span></article>
+      <article><strong>1</strong><span>Accountable partner from development to shipment.</span></article>
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "VESA Stats",
+  "settings": [
+    { "type": "text", "id": "title", "label": "Title", "default": "Buyer confidence built into every sourcing step" }
+  ],
+  "presets": [{ "name": "VESA Stats" }]
+}
+{% endschema %}

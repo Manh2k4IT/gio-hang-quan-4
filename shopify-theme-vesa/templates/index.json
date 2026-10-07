@@ -1,0 +1,55 @@
+{
+  "sections": {
+    "hero": {
+      "type": "vesa-hero",
+      "settings": {
+        "eyebrow": "Apparel Sourcing",
+        "headline": "Built on Experience. Powered by Intelligence.",
+        "subheadline": "A buyer-first sourcing system designed for clarity, execution discipline and faster decisions.",
+        "primary_cta_label": "Start Sourcing Discussion",
+        "primary_cta_link": "/pages/contact",
+        "secondary_cta_label": "View Buyer Path",
+        "secondary_cta_link": "#buyer-path"
+      }
+    },
+    "stats": {
+      "type": "vesa-stats",
+      "settings": {
+        "title": "Buyer confidence built into every sourcing step"
+      }
+    },
+    "path": {
+      "type": "vesa-buyer-path",
+      "settings": {
+        "title": "From enquiry to production decision, without confusion"
+      }
+    },
+    "countries": {
+      "type": "vesa-countries",
+      "settings": {
+        "title": "Two-country sourcing strength. One buyer-facing system"
+      }
+    },
+    "categories": {
+      "type": "vesa-categories",
+      "settings": {
+        "title": "Commercial garment categories buyers can build around"
+      }
+    },
+    "faq": {
+      "type": "vesa-faq-contact",
+      "settings": {
+        "title": "Questions buyers usually ask before they reach out",
+        "contact_title": "Let's build your next garment sourcing program"
+      }
+    }
+  },
+  "order": [
+    "hero",
+    "stats",
+    "path",
+    "countries",
+    "categories",
+    "faq"
+  ]
+}

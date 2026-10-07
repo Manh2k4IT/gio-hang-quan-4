@@ -93,6 +93,26 @@ Luu y quan trong:
 - Hien tai cart dang in-memory theo process. Vi vay neu chay >1 process thi cart co the khong dong bo giua process.
 - Truoc khi scale ngang, nen dua cart/session vao Redis hoac DB dung chung.
 
+## Phan tich luot truy cap
+
+Trong trang quan tri, nut **Phan tich luot truy cap** nam ngay duoi **Phan tich san pham**.
+Muc dang xem duoc luu trong hash cua URL (vi du `admin.html#traffic-insights`), nen tai lai trang van giu nguyen muc. Link danh muc san pham van mo muc San pham.
+Chon **Tu ngay** va **Den ngay**, sau do bam **Lam moi** de xem khoang thoi gian tuy chon (bao gom ca hai ngay).
+Mac dinh la 7 ngay gan nhat. Chi cho chon trong 90 ngay gan nhat, khong chon ngay tuong lai hay ngay bat dau sau ngay ket thuc.
+Giao dien hien bo loc ngay phia tren hai o **Luot xem trong bo loc** va **Don phat sinh trong bo loc**, ben duoi la bang **Phan tich luot click san pham** (Top 10); khong hien bang chi tiet theo ngay hay ghi chu thong ke. Loi tai du lieu van duoc thong bao.
+Click anh/ten san pham mo `/shop.html?productId=...`. Moi lan tai thanh cong trang xem rieng san pham hop le, khong an, duoc dem mot luot click (bao gom link chia se va tai lai). Khong dem nut them gio/doi mau, bot hay prefetch. Click bat dau ghi nhan tu khi tinh nang bat, luu cung state trong 90 ngay. Top 10 cong luot theo ID trong khoang ngay, sap xep giam dan (bang nhau sap theo ID); ten/SKU la thong tin tai lan click gan nhat trong khoang loc, van giu thong ke neu san pham bi xoa. API tra `topProductClicks` gom `productId`, `name`, `sku`, `clicks`.
+Don phat sinh dem so don hien co theo `createdAt` trong khoang ngay da chon, theo gio Viet Nam, bat ke trang thai va danh muc. Don gop chi tinh mot don; don da xoa khong duoc tinh. Thay doi trang thai khong doi ngay tinh don. API tra them `totalOrders`.
+Don cu thieu ngay tao hop le khong the loc theo ngay: API tra `undatedOrders` va giao dien hien canh bao, khong tu gan ngay tao.
+
+- Dem moi lan GET `/shop.html` thanh cong la mot luot xem (bao gom tai lai trang).
+- Khong dem trang quan tri, request API, prefetch va bot nhan dien duoc qua User-Agent.
+- Trinh duyet rieng biet duoc nhan dien bang cookie gio hang; xoa cookie/doi trinh duyet se duoc tinh moi. Khong dong nghia voi so nguoi thuc te.
+- Ngay thong ke theo mui gio `Asia/Ho_Chi_Minh`. Du lieu bat dau tu khi tinh nang duoc bat, khong khoi phuc lich su truoc do.
+- Luu toi da 90 ngay trong `DATA_DIR/state.json`, cung co che luu cua san pham/don hang. Chi luu ma bam cua cookie, khong luu IP.
+- `GET /traffic-insights?days=7` tra thong ke tong hop; `days` chap nhan `7`, `30`, `90`. Khong tra ma nhan dien trinh duyet.
+- `GET /traffic-insights?startDate=2026-10-01&endDate=2026-10-07` loc theo ngay `YYYY-MM-DD`; can truyen ca hai ngay. Khoang ngay khong hop le tra HTTP 400. Chi so "Luot xem hom nay" luon dem ngay hien tai, doc lap voi bo loc.
+- Kiem tra tinh nang: `npm run test:traffic`.
+
 ## Healthcheck
 
 Endpoint `GET /health` tra ve trang thai app de platform monitor.

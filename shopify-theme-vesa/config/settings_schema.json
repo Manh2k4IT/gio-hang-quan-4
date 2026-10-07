@@ -1,0 +1,19 @@
+[
+  {
+    "name": "Theme settings",
+    "settings": [
+      {
+        "type": "text",
+        "id": "brand_tagline",
+        "label": "Brand tagline",
+        "default": "Buyer-focused apparel sourcing"
+      },
+      {
+        "type": "color",
+        "id": "brand_accent",
+        "label": "Accent color",
+        "default": "#d08b31"
+      }
+    ]
+  }
+]

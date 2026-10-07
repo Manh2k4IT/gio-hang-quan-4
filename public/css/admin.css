@@ -1701,6 +1701,21 @@ td img{
     overflow:auto;
 }
 
+#traffic-insights-filter input{
+    flex:0 1 auto;
+    width:180px;
+    height:44px;
+    min-width:150px;
+}
+
+.traffic-product-clicks{
+    overflow:auto;
+}
+
+.traffic-product-clicks table{
+    min-width:520px;
+}
+
 .product-insights-table-card table{
     width:100%;
     table-layout:fixed;
@@ -1808,6 +1823,11 @@ td img{
     .product-insights-toolbar select{
         width:100%;
         min-width:unset;
+    }
+
+    #traffic-insights-filter input{
+        width:100%;
+        min-width:0;
     }
 
     .order-customer-cell,

@@ -7,7 +7,7 @@
 
     <title>Quản lí đơn hàng kho vải quận 4</title>
 
-    <link rel="stylesheet" href="css/admin.css?v=20260725c">
+    <link rel="stylesheet" href="css/admin.css?v=20261007b">
     <style>
         .brand-title {
             display: flex;
@@ -92,6 +92,8 @@
             <button class="nav-btn" data-tab="customer-data">🗂️ Data tổng</button>
 
             <button class="nav-btn" data-tab="product-insights">🔥 Phân tích sản phẩm</button>
+
+            <button class="nav-btn" data-tab="traffic-insights">📊 Phân tích lượt truy cập</button>
 
         </nav>
 
@@ -523,6 +525,37 @@
 
         </section>
 
+        <section id="traffic-insights-view" class="view-panel">
+            <div class="container">
+                <header class="header">
+                    <div>
+                        <h1>📊 Phân tích lượt truy cập</h1>
+                        <p>Theo dõi lượt xem trang cửa hàng theo giờ Việt Nam. Lưu dữ liệu 90 ngày gần nhất.</p>
+                    </div>
+                </header>
+                <form id="traffic-insights-filter" class="card product-insights-toolbar" onsubmit="event.preventDefault(); loadTrafficInsights()">
+                    <label for="traffic-insights-start">Từ ngày</label>
+                    <input type="date" id="traffic-insights-start" required>
+                    <label for="traffic-insights-end">Đến ngày</label>
+                    <input type="date" id="traffic-insights-end" required>
+                    <button type="submit" class="btn-add">Làm mới</button>
+                </form>
+                <p id="traffic-insights-status" role="status" aria-live="polite" hidden></p>
+                <section class="dashboard">
+                    <div class="card stat-card"><span>Lượt xem trong bộ lọc</span><h2 id="trafficTotalViews">—</h2></div>
+                    <div class="card stat-card"><span>Đơn phát sinh trong bộ lọc</span><h2 id="trafficTotalOrders">—</h2></div>
+                </section>
+                <section class="card traffic-product-clicks">
+                    <h2>Phân tích lượt click sản phẩm</h2>
+                    <p>10 sản phẩm được bấm vào xem nhiều nhất trong khoảng ngày đã chọn.</p>
+                    <table>
+                        <thead><tr><th>Hạng</th><th>SKU</th><th>Sản phẩm</th><th>Lượt click</th></tr></thead>
+                        <tbody id="traffic-product-clicks-list"></tbody>
+                    </table>
+                </section>
+            </div>
+        </section>
+
     </main>
 
 </div>
@@ -676,7 +709,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
-<script src="js/admin.js?v=20260725a"></script>
+<script src="js/admin.js?v=20261007b"></script>
 
 </body>
 
